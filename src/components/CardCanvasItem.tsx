@@ -236,47 +236,59 @@ export function CardCanvasItem({
 
   const contentRef = useRef<HTMLDivElement>(null);
   const contentPointerDownRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const headerPointerDownRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
 
-  // Bind the content click listener natively so the content div is not flagged
-  // as an interactive element by static a11y lint, while preserving the
-  // original mouse-only card selection behavior.
+  // Bind the content and header click listeners natively so these divs are not flagged
+  // as interactive elements by static a11y lint, while preserving mouse-only card selection.
   useEffect(() => {
     const contentEl = contentRef.current;
-    if (!contentEl || !onSelect) return;
+    const headerEl = headerRef.current;
+    if (!onSelect || (!contentEl && !headerEl)) return;
 
-    const handlePointerDown = (e: PointerEvent) => {
-      if (e.button !== 0) {
-        contentPointerDownRef.current = null;
-        return;
-      }
-      contentPointerDownRef.current = { x: e.clientX, y: e.clientY };
-    };
-
-    const handlePointerCancel = () => {
-      contentPointerDownRef.current = null;
-    };
-
-    const handleClick = (e: MouseEvent) => {
-      const start = contentPointerDownRef.current;
-      contentPointerDownRef.current = null;
-      if (optionsRef.current.requireSelectionToMoveResize && start) {
-        const dx = e.clientX - start.x;
-        const dy = e.clientY - start.y;
-        if (dx * dx + dy * dy >= CONTENT_CLICK_MOVE_THRESHOLD_PX * CONTENT_CLICK_MOVE_THRESHOLD_PX) {
+    const bindClickSelect = (
+      element: HTMLElement,
+      pointerDownRef: MutableRefObject<{ readonly x: number; readonly y: number } | null>
+    ) => {
+      const handlePointerDown = (e: PointerEvent) => {
+        if (e.button !== 0) {
+          pointerDownRef.current = null;
           return;
         }
-      }
-      onSelect(card.id);
+        pointerDownRef.current = { x: e.clientX, y: e.clientY };
+      };
+
+      const handlePointerCancel = () => {
+        pointerDownRef.current = null;
+      };
+
+      const handleClick = (e: MouseEvent) => {
+        const start = pointerDownRef.current;
+        pointerDownRef.current = null;
+        if (optionsRef.current.requireSelectionToMoveResize && start) {
+          const dx = e.clientX - start.x;
+          const dy = e.clientY - start.y;
+          if (dx * dx + dy * dy >= CONTENT_CLICK_MOVE_THRESHOLD_PX * CONTENT_CLICK_MOVE_THRESHOLD_PX) {
+            return;
+          }
+        }
+        onSelect(card.id);
+      };
+
+      element.addEventListener('pointerdown', handlePointerDown);
+      element.addEventListener('pointercancel', handlePointerCancel);
+      element.addEventListener('click', handleClick);
+      return () => {
+        element.removeEventListener('pointerdown', handlePointerDown);
+        element.removeEventListener('pointercancel', handlePointerCancel);
+        element.removeEventListener('click', handleClick);
+      };
     };
 
-    contentEl.addEventListener('pointerdown', handlePointerDown);
-    contentEl.addEventListener('pointercancel', handlePointerCancel);
-    contentEl.addEventListener('click', handleClick);
-    return () => {
-      contentEl.removeEventListener('pointerdown', handlePointerDown);
-      contentEl.removeEventListener('pointercancel', handlePointerCancel);
-      contentEl.removeEventListener('click', handleClick);
-    };
+    const cleanups: Array<() => void> = [];
+    if (contentEl) cleanups.push(bindClickSelect(contentEl, contentPointerDownRef));
+    if (headerEl) cleanups.push(bindClickSelect(headerEl, headerPointerDownRef));
+    return () => { cleanups.forEach((cleanup) => { cleanup(); }); };
   }, [card.id, onSelect]);
 
   return (
@@ -292,7 +304,7 @@ export function CardCanvasItem({
         zIndex: card.zIndex,
       }}
     >
-      <div className="cards-card-canvas__card-header" style={card.titleStyle}>
+      <div ref={headerRef} className="cards-card-canvas__card-header" style={card.titleStyle}>
         {renderCardTitle ? renderCardTitle(card.title) : card.title}
       </div>
       <div

@@ -60,6 +60,8 @@
   font-family: inherit;
   text-align: left;
   color: #374151;
+  /* 允许长单词/URL 在卡片宽度边界处按单词边界换行，避免撑出卡片 */
+  word-wrap: break-word;
 }
 
 .cards-card-canvas__resize-handle {
