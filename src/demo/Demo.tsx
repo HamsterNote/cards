@@ -6,6 +6,8 @@ export function Demo() {
   const [cards, setCards] = useState<CardCanvasCard[]>([]);
   const [newCardTitle, setNewCardTitle] = useState('');
   const [newCardContent, setNewCardContent] = useState('');
+  const [newCardTitleBg, setNewCardTitleBg] = useState('#f9fafb');
+  const [newCardContentBg, setNewCardContentBg] = useState('#ffffff');
 
   const handleAddCard = () => {
     if (!newCardTitle.trim() || !newCardContent.trim()) return;
@@ -18,6 +20,8 @@ export function Demo() {
       y: 0,
       width: 180,
       height: 120,
+      titleStyle: { backgroundColor: newCardTitleBg },
+      contentStyle: { backgroundColor: newCardContentBg },
     };
 
     setCards([...cards, newCard]);
@@ -34,23 +38,8 @@ export function Demo() {
       </header>
 
       <section className="demo__section">
-        <h2 className="demo__section-title">Button</h2>
-        <div className="demo__row">
-          <Button variant="filled" size="md">
-            Filled
-          </Button>
-          <Button variant="outlined" size="md">
-            Outlined
-          </Button>
-          <Button variant="ghost" size="sm">
-            Ghost
-          </Button>
-        </div>
-      </section>
-
-      <section className="demo__section">
         <h2 className="demo__section-title">CardCanvas</h2>
-        <div className="demo__row">
+        <div className="demo__row card-canvas-demo-layout">
           <div className="card-canvas-demo-settings">
             <div className="demo__form-group">
               <label htmlFor="card-title">Title</label>
@@ -72,6 +61,26 @@ export function Demo() {
                 placeholder="Card Content"
               />
             </div>
+            <div className="demo__form-group">
+              <label htmlFor="card-title-bg">Title Background</label>
+              <input
+                id="card-title-bg"
+                data-card-title-bg-input
+                type="color"
+                value={newCardTitleBg}
+                onChange={(e) => setNewCardTitleBg(e.target.value)}
+              />
+            </div>
+            <div className="demo__form-group">
+              <label htmlFor="card-content-bg">Content Background</label>
+              <input
+                id="card-content-bg"
+                data-card-content-bg-input
+                type="color"
+                value={newCardContentBg}
+                onChange={(e) => setNewCardContentBg(e.target.value)}
+              />
+            </div>
             <Button
               data-card-add-button
               variant="filled"
@@ -83,9 +92,19 @@ export function Demo() {
           </div>
           <div className="card-canvas-demo-stage">
             <div className="card-canvas-demo-stage-wrapper">
-              <CardCanvas cards={cards} onCardsChange={setCards} />
+              <CardCanvas
+                cards={cards}
+                onCardsChange={setCards}
+                className="card-canvas-demo-transform"
+              />
             </div>
           </div>
+        </div>
+        <div className="demo__data-display" data-card-data-display>
+          <h3 className="demo__data-display-title">Current Cards Data</h3>
+          <pre className="demo__data-display-content">
+            {JSON.stringify(cards, null, 2)}
+          </pre>
         </div>
       </section>
     </main>

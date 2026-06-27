@@ -1,6 +1,12 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
-import { Drag, DragOperationType, FingerOperationType, type Pose, type Finger } from '@system-ui-js/multi-drag';
+import {
+  Drag,
+  DragOperationType,
+  FingerOperationType,
+  type Pose,
+  type Finger,
+} from '@system-ui-js/multi-drag';
 import './CardCanvas.css';
 
 /** 卡片数据模型 */
@@ -19,6 +25,10 @@ export interface CardCanvasCard {
   width: number;
   /** 卡片高度 */
   height: number;
+  /** 标题区域自定义样式 */
+  titleStyle?: CSSProperties;
+  /** 内容区域自定义样式 */
+  contentStyle?: CSSProperties;
 }
 
 /** 画布组件属性 */
@@ -33,7 +43,12 @@ export interface CardCanvasProps {
   children?: ReactNode;
 }
 
-export function CardCanvas({ cards, onCardsChange, className = '', children }: CardCanvasProps) {
+export function CardCanvas({
+  cards,
+  onCardsChange,
+  className = '',
+  children,
+}: CardCanvasProps) {
   // Use a ref to hold the latest onCardsChange to avoid stale closures in event listeners
   const onCardsChangeRef = useRef(onCardsChange);
   useEffect(() => {
@@ -66,7 +81,9 @@ export function CardCanvas({ cards, onCardsChange, className = '', children }: C
 interface CardItemProps {
   card: CardCanvasCard;
   cardsRef: React.MutableRefObject<CardCanvasCard[]>;
-  onCardsChangeRef: React.MutableRefObject<((nextCards: CardCanvasCard[]) => void) | undefined>;
+  onCardsChangeRef: React.MutableRefObject<
+    ((nextCards: CardCanvasCard[]) => void) | undefined
+  >;
 }
 
 function CardItem({ card, cardsRef, onCardsChangeRef }: CardItemProps) {
@@ -76,6 +93,9 @@ function CardItem({ card, cardsRef, onCardsChangeRef }: CardItemProps) {
   // Use refs to store drag instances for cleanup
   const dragRef = useRef<Drag | null>(null);
   const resizeDragRef = useRef<Drag | null>(null);
+
+  // Track whether the user is currently resizing so the card-level drag can be ignored.
+  const isResizingRef = useRef(false);
 
   // Ref to hold the current card prop for event handlers without triggering re-renders
   const cardPropRef = useRef(card);
@@ -96,7 +116,7 @@ function CardItem({ card, cardsRef, onCardsChangeRef }: CardItemProps) {
         width: c.width,
         height: c.height,
         rotation: 0,
-        scale: 1
+        scale: 1,
       };
     };
 
@@ -110,12 +130,18 @@ function CardItem({ card, cardsRef, onCardsChangeRef }: CardItemProps) {
     let initialY = cardPropRef.current.y;
 
     const onStart = () => {
+      if (isResizingRef.current) return;
       initialX = cardPropRef.current.x;
       initialY = cardPropRef.current.y;
     };
 
     const onMove = (fingers: Finger[]) => {
-      if (!onCardsChangeRef.current || fingers.length === 0) return;
+      if (
+        isResizingRef.current ||
+        !onCardsChangeRef.current ||
+        fingers.length === 0
+      )
+        return;
       const finger = fingers[0];
       if (!finger) return;
 
@@ -144,7 +170,7 @@ function CardItem({ card, cardsRef, onCardsChangeRef }: CardItemProps) {
     const onEnd = () => {
       cardEl.style.transform = '';
     };
-    
+
     drag.addEventListener(DragOperationType.Start, onStart);
     drag.addEventListener(DragOperationType.Move, onMove);
     drag.addEventListener(DragOperationType.End, onEnd);
@@ -164,49 +190,72 @@ function CardItem({ card, cardsRef, onCardsChangeRef }: CardItemProps) {
     const handleEl = resizeHandleRef.current;
     if (!handleEl) return;
 
+    // Disable the card-level drag as soon as the resize handle is pressed.
+    // A native capture listener runs before the card's native bubble-phase
+    // pointerdown listener can start a move, while still allowing the resize
+    // handle's own drag instance to receive the event.
+    const handlePointerDown = (event: PointerEvent) => {
+      // Match multi-drag's own filtering: only the primary mouse button starts a drag.
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+      isResizingRef.current = true;
+      dragRef.current?.setDisabled();
+    };
+    handleEl.addEventListener('pointerdown', handlePointerDown, true);
+
+    // Safety net: if a pointer is released without the resize Drag firing End
+    // (e.g. the gesture was cancelled or filtered), always re-enable card drag.
+    const finishResizeMode = () => {
+      isResizingRef.current = false;
+      dragRef.current?.setEnabled();
+    };
+    document.addEventListener('pointerup', finishResizeMode, true);
+    document.addEventListener('pointercancel', finishResizeMode, true);
+
     const dragHandle = new Drag(handleEl, {
-        setPose: () => {}, 
+      setPose: () => {},
     });
     resizeDragRef.current = dragHandle;
 
     let initialWidth = cardPropRef.current.width;
     let initialHeight = cardPropRef.current.height;
-    
+
     const handleStart = () => {
-        initialWidth = cardPropRef.current.width;
-        initialHeight = cardPropRef.current.height;
+      initialWidth = cardPropRef.current.width;
+      initialHeight = cardPropRef.current.height;
     };
 
     const handleMove = (fingers: Finger[]) => {
-        if (!onCardsChangeRef.current || fingers.length === 0) return;
-        const finger = fingers[0];
-        if (!finger) return;
+      if (!onCardsChangeRef.current || fingers.length === 0) return;
+      const finger = fingers[0];
+      if (!finger) return;
 
-        const startOp = finger.getPath(FingerOperationType.Start)[0];
-        const moveOp = finger.getLastOperation(FingerOperationType.Move);
+      const startOp = finger.getPath(FingerOperationType.Start)[0];
+      const moveOp = finger.getLastOperation(FingerOperationType.Move);
 
-        if (startOp && moveOp) {
-            const deltaX = moveOp.point.x - startOp.point.x;
-            const deltaY = moveOp.point.y - startOp.point.y;
+      if (startOp && moveOp) {
+        const deltaX = moveOp.point.x - startOp.point.x;
+        const deltaY = moveOp.point.y - startOp.point.y;
 
-            const nextWidth = Math.max(50, initialWidth + deltaX);
-            const nextHeight = Math.max(50, initialHeight + deltaY);
+        const nextWidth = Math.max(80, initialWidth + deltaX);
+        const nextHeight = Math.max(80, initialHeight + deltaY);
 
-            const nextCards = cardsRef.current.map((c) => {
-              if (c.id === cardPropRef.current.id) {
-                return {
-                  ...c,
-                  width: nextWidth,
-                  height: nextHeight,
-                };
-              }
-              return c;
-            });
-            onCardsChangeRef.current(nextCards);
-        }
+        const nextCards = cardsRef.current.map((c) => {
+          if (c.id === cardPropRef.current.id) {
+            return {
+              ...c,
+              width: nextWidth,
+              height: nextHeight,
+            };
+          }
+          return c;
+        });
+        onCardsChangeRef.current(nextCards);
+      }
     };
-    
+
     const handleEnd = () => {
+      finishResizeMode();
     };
 
     dragHandle.addEventListener(DragOperationType.Start, handleStart);
@@ -215,12 +264,15 @@ function CardItem({ card, cardsRef, onCardsChangeRef }: CardItemProps) {
     dragHandle.addEventListener(DragOperationType.AllEnd, handleEnd);
 
     return () => {
-        dragHandle.removeEventListener(DragOperationType.Start, handleStart);
-        dragHandle.removeEventListener(DragOperationType.Move, handleMove);
-        dragHandle.removeEventListener(DragOperationType.End, handleEnd);
-        dragHandle.removeEventListener(DragOperationType.AllEnd, handleEnd);
-        dragHandle.destroy();
-        resizeDragRef.current = null;
+      handleEl.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('pointerup', finishResizeMode, true);
+      document.removeEventListener('pointercancel', finishResizeMode, true);
+      dragHandle.removeEventListener(DragOperationType.Start, handleStart);
+      dragHandle.removeEventListener(DragOperationType.Move, handleMove);
+      dragHandle.removeEventListener(DragOperationType.End, handleEnd);
+      dragHandle.removeEventListener(DragOperationType.AllEnd, handleEnd);
+      dragHandle.destroy();
+      resizeDragRef.current = null;
     };
   }, [cardsRef, onCardsChangeRef]);
 
@@ -236,13 +288,22 @@ function CardItem({ card, cardsRef, onCardsChangeRef }: CardItemProps) {
         height: `${card.height}px`,
       }}
     >
-      <div className="cards-card-canvas__card-header">{card.title}</div>
-      <div className="cards-card-canvas__card-content">{card.content}</div>
+      <div
+        className="cards-card-canvas__card-header"
+        style={card.titleStyle}
+      >
+        {card.title}
+      </div>
+      <div
+        className="cards-card-canvas__card-content"
+        style={card.contentStyle}
+      >
+        {card.content}
+      </div>
       <div
         ref={resizeHandleRef}
         className="cards-card-canvas__resize-handle"
         data-card-resize-handle
-        onPointerDown={(e) => e.stopPropagation()} // Prevent card drag when interacting with resize handle
       />
     </div>
   );

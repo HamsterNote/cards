@@ -20,9 +20,8 @@ body {
 
 .demo {
   min-height: 100dvh;
-  padding: 4rem 2rem;
-  max-width: 720px;
-  margin: 0 auto;
+  width: 100%;
+  padding: 2rem;
 }
 
 .demo__header {
@@ -102,6 +101,18 @@ body {
   border-color: rgba(0, 0, 0, 0.3);
 }
 
+.demo__form-group input[type='color'] {
+  width: 100%;
+  height: 2.5rem;
+  padding: 0.25rem;
+  cursor: pointer;
+}
+
+.card-canvas-demo-layout {
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
 .card-canvas-demo-settings {
   flex: 0 0 240px;
   padding-right: 1rem;
@@ -120,9 +131,38 @@ body {
 
 .card-canvas-demo-stage-wrapper {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
+}
+
+/* Demo 中给 CardCanvas wrapper 添加偏移，展示 className 透传能力 */
+.card-canvas-demo-transform {
   transform: translate(50%, 50%);
+}
+
+.demo__data-display {
+  margin-top: 1.5rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding-top: 1rem;
+}
+
+.demo__data-display-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #525252;
+}
+
+.demo__data-display-content {
+  margin: 0;
+  padding: 1rem;
+  background-color: #f5f5f5;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 300px;
+  font-family:
+    'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono',
+    'Source Code Pro', monospace;
 }

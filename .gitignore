@@ -31,3 +31,4 @@ Thumbs.db
 # Tooling
 .omo/
 .codegraph/
+test-results/
