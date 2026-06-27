@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, CardCanvas } from '../index';
+import { Button, CardCanvas, deleteCards } from '../index';
 import type { CardCanvasCard } from '../index';
 
 export function Demo() {
@@ -10,6 +10,7 @@ export function Demo() {
   const [newCardContent, setNewCardContent] = useState('');
   const [newCardTitleBg, setNewCardTitleBg] = useState('#f9fafb');
   const [newCardContentBg, setNewCardContentBg] = useState('#ffffff');
+  const [newCardParent, setNewCardParent] = useState('');
   const [requireSelectionToMoveResize, setRequireSelectionToMoveResize] = useState(false);
   const [selectOnMoveEnd, setSelectOnMoveEnd] = useState(false);
 
@@ -30,9 +31,14 @@ export function Demo() {
       contentStyle: { backgroundColor: newCardContentBg },
     };
 
+    if (newCardParent.trim()) {
+      newCard.parent = newCardParent.trim();
+    }
+
     setCards([...cards, newCard]);
     setNewCardTitle('');
     setNewCardContent('');
+    setNewCardParent('');
   };
 
   const handleSelect = (id: string) => {
@@ -42,6 +48,20 @@ export function Demo() {
 
   const handleClearSelection = () => {
     setSelected([]);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selected.length === 0) return;
+
+    const newCards = await deleteCards(cards, selected, async (_cards, _deleteIds, meta) => {
+      if (meta.hasChildren) {
+        return window.confirm("Delete this card and its child cards?");
+      }
+      return true;
+    });
+
+    setCards(newCards);
+    setSelected((prev) => prev.filter((id) => newCards.some((card) => card.id === id)));
   };
 
   return (
@@ -55,7 +75,12 @@ export function Demo() {
       <section className="demo__section">
         <h2 className="demo__section-title">CardCanvas</h2>
         <div className="demo__row card-canvas-demo-layout">
-          <div className="card-canvas-demo-settings">
+          <div
+            className="card-canvas-demo-settings"
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+          >
             <div className="demo__form-group">
               <label htmlFor="card-title">Title</label>
               <input
@@ -96,6 +121,16 @@ export function Demo() {
                 onChange={(e) => setNewCardContentBg(e.target.value)}
               />
             </div>
+            <div className="demo__form-group">
+              <label htmlFor="card-parent">Parent ID (optional)</label>
+              <input
+                id="card-parent"
+                data-card-parent-input
+                value={newCardParent}
+                onChange={(e) => setNewCardParent(e.target.value)}
+                placeholder="Parent ID"
+              />
+            </div>
             <div className="demo__form-group demo__form-group--checkbox">
               <label>
                 <input
@@ -125,6 +160,15 @@ export function Demo() {
               onClick={handleAddCard}
             >
               Add Card
+            </Button>
+            <Button
+              data-testid="delete-selected-card"
+              variant="filled"
+              size="md"
+              disabled={selected.length === 0}
+              onClick={handleDeleteSelected}
+            >
+              Delete Selected
             </Button>
           </div>
           <div className="card-canvas-demo-stage">

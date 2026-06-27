@@ -8,6 +8,13 @@ import {
   type Pose,
 } from '@system-ui-js/multi-drag';
 import type { CardCanvasCard, CardCanvasOptions } from './CardCanvas';
+import type { CardDragPositionSnapshot } from '../utils/cards';
+import {
+  assignParentFromPoint,
+  createDragPositionSnapshot,
+  findParentCandidateId,
+  moveCardsFromSnapshot,
+} from '../utils/cards';
 
 export interface CardCanvasItemProps {
   readonly card: CardCanvasCard;
@@ -20,6 +27,8 @@ export interface CardCanvasItemProps {
   readonly options: Required<CardCanvasOptions>;
   readonly renderCardTitle?: ((title: string) => ReactNode) | undefined;
   readonly renderCardContent?: ((content: string) => ReactNode) | undefined;
+  readonly isParentCandidate: boolean;
+  readonly setParentCandidateId: (id: string | undefined) => void;
 }
 
 const CONTENT_CLICK_MOVE_THRESHOLD_PX = 5;
@@ -33,6 +42,8 @@ export function CardCanvasItem({
   options,
   renderCardTitle,
   renderCardContent,
+  isParentCandidate,
+  setParentCandidateId,
 }: CardCanvasItemProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const resizeHandleRef = useRef<HTMLDivElement>(null);
@@ -90,14 +101,15 @@ export function CardCanvasItem({
       drag.setDisabled();
     }
 
-    let initialX = cardPropRef.current.x;
-    let initialY = cardPropRef.current.y;
+    let dragPositionSnapshot: CardDragPositionSnapshot = new Map();
 
     const onStart = () => {
       didMoveRef.current = false;
+      dragPositionSnapshot = new Map();
       if (isResizingRef.current || !canMoveOrResizeRef.current) return;
-      initialX = cardPropRef.current.x;
-      initialY = cardPropRef.current.y;
+
+      const cardId = cardPropRef.current.id;
+      dragPositionSnapshot = createDragPositionSnapshot(cardsRef.current, cardId);
     };
 
     const onMove = (fingers: Finger[]) => {
@@ -114,23 +126,69 @@ export function CardCanvasItem({
 
       const startOp = finger.getPath(FingerOperationType.Start)[0];
       const moveOp = finger.getLastOperation(FingerOperationType.Move);
-      if (!startOp || !moveOp) return;
+      if (!startOp || !moveOp || dragPositionSnapshot.size === 0) return;
 
       const deltaX = moveOp.point.x - startOp.point.x;
       const deltaY = moveOp.point.y - startOp.point.y;
-      if (deltaX === 0 && deltaY === 0) return;
 
       const cardId = cardPropRef.current.id;
-      const nextCards = cardsRef.current.map((currentCard) => {
-        if (currentCard.id !== cardId) return currentCard;
-        return { ...currentCard, x: initialX + deltaX, y: initialY + deltaY };
+
+      const moveResult = moveCardsFromSnapshot(
+        cardsRef.current,
+        dragPositionSnapshot,
+        {
+          draggedCardId: cardId,
+          delta: { x: deltaX, y: deltaY },
+        }
+      );
+      if (moveResult.draggedCard !== undefined) {
+        cardPropRef.current = moveResult.draggedCard;
+      }
+      cardsRef.current = moveResult.cards;
+
+      const centerX = cardPropRef.current.x + cardPropRef.current.width / 2;
+      const centerY = cardPropRef.current.y + cardPropRef.current.height / 2;
+
+      const candidateId = findParentCandidateId(moveResult.cards, cardId, {
+        x: centerX,
+        y: centerY,
       });
-      onCardsChangeRef.current(nextCards);
+
+      setParentCandidateId(candidateId);
+
+      onCardsChangeRef.current(moveResult.cards);
       didMoveRef.current = true;
     };
 
     const onEnd = () => {
       cardEl.style.transform = '';
+
+      if (didMoveRef.current && onCardsChangeRef.current) {
+        const cardId = cardPropRef.current.id;
+        const draggedCard = cardsRef.current.find(
+          (currentCard) => currentCard.id === cardId
+        );
+
+        if (draggedCard !== undefined) {
+          const center = {
+            x: draggedCard.x + draggedCard.width / 2,
+            y: draggedCard.y + draggedCard.height / 2,
+          };
+          const assignmentResult = assignParentFromPoint(
+            cardsRef.current,
+            cardId,
+            center
+          );
+          if (assignmentResult.draggedCard !== undefined) {
+            cardPropRef.current = assignmentResult.draggedCard;
+          }
+          cardsRef.current = assignmentResult.cards;
+          onCardsChangeRef.current(assignmentResult.cards);
+        }
+      }
+
+      setParentCandidateId(undefined);
+      dragPositionSnapshot = new Map();
       if (optionsRef.current.selectOnMoveEnd && didMoveRef.current) {
         onSelectRef.current?.(cardPropRef.current.id);
       }
@@ -150,7 +208,7 @@ export function CardCanvasItem({
       drag.destroy();
       dragRef.current = null;
     };
-  }, [cardsRef, onCardsChangeRef]);
+  }, [cardsRef, onCardsChangeRef, setParentCandidateId]);
 
   useEffect(() => {
     const handleEl = resizeHandleRef.current;
@@ -169,6 +227,7 @@ export function CardCanvasItem({
       if (canMoveOrResizeRef.current) {
         dragRef.current?.setEnabled();
       }
+      setParentCandidateId(undefined);
     };
     document.addEventListener('pointerup', finishResizeMode, true);
     document.addEventListener('pointercancel', finishResizeMode, true);
@@ -186,6 +245,7 @@ export function CardCanvasItem({
       if (!canMoveOrResizeRef.current) return;
       initialWidth = cardPropRef.current.width;
       initialHeight = cardPropRef.current.height;
+      setParentCandidateId(undefined);
     };
 
     const handleMove = (fingers: Finger[]) => {
@@ -211,8 +271,11 @@ export function CardCanvasItem({
 
       const nextCards = cardsRef.current.map((currentCard) => {
         if (currentCard.id !== cardId) return currentCard;
-        return { ...currentCard, width: nextWidth, height: nextHeight };
+        const nextCard = { ...currentCard, width: nextWidth, height: nextHeight };
+        cardPropRef.current = nextCard;
+        return nextCard;
       });
+      cardsRef.current = nextCards;
       onCardsChangeRef.current(nextCards);
     };
 
@@ -232,7 +295,7 @@ export function CardCanvasItem({
       dragHandle.destroy();
       resizeDragRef.current = null;
     };
-  }, [cardsRef, onCardsChangeRef]);
+  }, [cardsRef, onCardsChangeRef, setParentCandidateId]);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const contentPointerDownRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
@@ -294,8 +357,11 @@ export function CardCanvasItem({
   return (
     <div
       ref={cardRef}
-      className={`cards-card-canvas__card${isSelected ? ' cards-card-canvas__card--selected' : ''}`}
+      className={`cards-card-canvas__card${isSelected ? ' cards-card-canvas__card--selected' : ''}${
+        isParentCandidate ? ' cards-card-canvas__card--parent-candidate' : ''
+      }`}
       data-card-id={card.id}
+      data-parent-candidate={isParentCandidate ? 'true' : undefined}
       style={{
         left: `${card.x}px`,
         top: `${card.y}px`,

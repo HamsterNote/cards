@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CardCanvasItem } from './CardCanvasItem';
 import './CardCanvas.css';
 
@@ -7,6 +7,8 @@ import './CardCanvas.css';
 export interface CardCanvasCard {
   /** 唯一标识 */
   id: string;
+  /** 父卡片 id；无父级时省略 */
+  parent?: string;
   /** 卡片标题 */
   title: string;
   /** 卡片内容 */
@@ -71,6 +73,8 @@ export function CardCanvas({
   renderCardTitle,
   renderCardContent,
 }: CardCanvasProps) {
+  const [parentCandidateId, setParentCandidateId] = useState<string | undefined>();
+
   const normalizedOptions: Required<CardCanvasOptions> = {
     requireSelectionToMoveResize: options.requireSelectionToMoveResize ?? false,
     selectOnMoveEnd: options.selectOnMoveEnd ?? false,
@@ -135,6 +139,8 @@ export function CardCanvas({
             options={normalizedOptions}
             renderCardTitle={renderCardTitle}
             renderCardContent={renderCardContent}
+            isParentCandidate={parentCandidateId === card.id}
+            setParentCandidateId={setParentCandidateId}
           />
         ))}
         {children}

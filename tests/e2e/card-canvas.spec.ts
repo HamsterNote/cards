@@ -5,14 +5,56 @@ type DragDelta = {
   readonly y: number;
 };
 
+type DragPoint = {
+  readonly x: number;
+  readonly y: number;
+};
+
+type CardDragLocators = {
+  readonly card: Locator;
+  readonly handle: Locator;
+};
+
+type CardDataSnapshot = {
+  readonly id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly parent?: string;
+};
+
+type HierarchyCardIds = {
+  readonly parentId: string;
+  readonly childId: string;
+  readonly grandchildId: string;
+};
+
 async function addCard(
   page: Page,
   title = 'Test Card',
   content = 'Test content'
 ) {
+  const cardCount = await page.locator('[data-card-id]').count();
   await page.locator('[data-card-title-input]').fill(title);
   await page.locator('[data-card-content-input]').fill(content);
   await page.getByRole('button', { name: 'Add Card' }).click();
+  await expect(page.locator('[data-card-id]')).toHaveCount(cardCount + 1);
+}
+
+async function addCardWithParent(
+  page: Page,
+  parentId: string,
+  title = 'Test Card',
+  content = 'Test content'
+) {
+  const cardCount = await page.locator('[data-card-id]').count();
+  await page.locator('[data-card-title-input]').fill(title);
+  await page.locator('[data-card-content-input]').fill(content);
+  await page.locator('[data-card-parent-input]').fill(parentId);
+  await page.getByRole('button', { name: 'Add Card' }).click();
+  await expect(page.locator('[data-card-id]')).toHaveCount(cardCount + 1);
+  await page.locator('[data-card-parent-input]').fill('');
 }
 
 // Helper to locate the first card and its parts.
@@ -37,6 +79,7 @@ async function dragLocatorBy(
   locator: Locator,
   delta: DragDelta
 ) {
+  await locator.scrollIntoViewIfNeeded();
   const box = await getRequiredBox(locator);
   const startX = box.x + box.width / 2;
   const startY = box.y + box.height / 2;
@@ -47,10 +90,178 @@ async function dragLocatorBy(
   await page.mouse.up();
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isCardDataSnapshot(value: unknown): value is CardDataSnapshot {
+  if (!isRecord(value)) return false;
+
+  const parent = value.parent;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.x === 'number' &&
+    typeof value.y === 'number' &&
+    typeof value.width === 'number' &&
+    typeof value.height === 'number' &&
+    (parent === undefined || typeof parent === 'string')
+  );
+}
+
+function parseCardData(text: string): CardDataSnapshot[] {
+  const parsed: unknown = JSON.parse(text);
+  if (!Array.isArray(parsed) || !parsed.every(isCardDataSnapshot)) {
+    throw new Error('Expected Current Cards Data to contain card snapshots');
+  }
+
+  return parsed;
+}
+
+async function getCardData(page: Page): Promise<CardDataSnapshot[]> {
+  return parseCardData(await page.locator('[data-card-data-content]').innerText());
+}
+
+function getCardDataById(
+  cards: readonly CardDataSnapshot[],
+  id: string
+): CardDataSnapshot {
+  const card = cards.find((candidate) => candidate.id === id);
+  if (card === undefined) {
+    throw new Error(`Expected card data for ${id}`);
+  }
+
+  return card;
+}
+
+function expectCardMovedBy(
+  before: CardDataSnapshot,
+  after: CardDataSnapshot,
+  delta: DragDelta
+) {
+  expect(after.x).toBeCloseTo(before.x + delta.x, 5);
+  expect(after.y).toBeCloseTo(before.y + delta.y, 5);
+}
+
+function expectCardPositionUnchanged(
+  before: CardDataSnapshot,
+  after: CardDataSnapshot
+) {
+  expect(after.x).toBeCloseTo(before.x, 5);
+  expect(after.y).toBeCloseTo(before.y, 5);
+}
+
+function expectNoParent(card: CardDataSnapshot) {
+  expect(Object.hasOwn(card, 'parent')).toBe(false);
+}
+
+async function createPositionedHierarchy(page: Page): Promise<HierarchyCardIds> {
+  const firstNewCardIndex = (await page.locator('[data-card-id]').count()) + 1;
+  const parentId = `card-${firstNewCardIndex}`;
+  const childId = `card-${firstNewCardIndex + 1}`;
+  const grandchildId = `card-${firstNewCardIndex + 2}`;
+
+  await addCard(page, 'Card A', 'Content A');
+  await dragLocatorBy(
+    page,
+    page.locator(`[data-card-id="${parentId}"] .cards-card-canvas__card-header`),
+    { x: 520, y: 300 }
+  );
+
+  await addCardWithParent(page, parentId, 'Card B', 'Content B');
+  const parentCard = page.locator(`[data-card-id="${parentId}"]`);
+  const parentBox = await getRequiredBox(parentCard);
+  const childCard = page.locator(`[data-card-id="${childId}"]`);
+  const childHeader = childCard.locator('.cards-card-canvas__card-header');
+  await dragCardCenterToPoint(
+    page,
+    { card: childCard, handle: childHeader },
+    {
+      x: parentBox.x + parentBox.width * 0.4,
+      y: parentBox.y + parentBox.height * 0.72,
+    }
+  );
+
+  await addCardWithParent(page, childId, 'Card C', 'Content C');
+
+  return { parentId, childId, grandchildId };
+}
+
+async function dragCardCenterTo(
+  page: Page,
+  locators: CardDragLocators,
+  targetLocator: Locator
+) {
+  await locators.handle.scrollIntoViewIfNeeded();
+  const cardBox = await getRequiredBox(locators.card);
+  const handleBox = await getRequiredBox(locators.handle);
+  const targetBox = await getRequiredBox(targetLocator);
+  const target = {
+    x: targetBox.x + targetBox.width / 2,
+    y: targetBox.y + targetBox.height / 2,
+  };
+  const cardCenter = {
+    x: cardBox.x + cardBox.width / 2,
+    y: cardBox.y + cardBox.height / 2,
+  };
+  const handleCenter = {
+    x: handleBox.x + handleBox.width / 2,
+    y: handleBox.y + handleBox.height / 2,
+  };
+
+  await page.mouse.move(handleCenter.x, handleCenter.y);
+  await page.mouse.down();
+  await page.mouse.move(
+    handleCenter.x + target.x - cardCenter.x,
+    handleCenter.y + target.y - cardCenter.y,
+    { steps: 20 }
+  );
+}
+
+async function dragCardCenterToPoint(
+  page: Page,
+  locators: CardDragLocators,
+  target: DragPoint
+) {
+  await locators.handle.scrollIntoViewIfNeeded();
+  const cardBox = await getRequiredBox(locators.card);
+  const handleBox = await getRequiredBox(locators.handle);
+  const cardCenter = {
+    x: cardBox.x + cardBox.width / 2,
+    y: cardBox.y + cardBox.height / 2,
+  };
+  const handleCenter = {
+    x: handleBox.x + handleBox.width / 2,
+    y: handleBox.y + handleBox.height / 2,
+  };
+
+  await page.mouse.move(handleCenter.x, handleCenter.y);
+  await page.mouse.down();
+  await page.mouse.move(
+    handleCenter.x + target.x - cardCenter.x,
+    handleCenter.y + target.y - cardCenter.y,
+    { steps: 20 }
+  );
+  await page.mouse.up();
+}
+
 async function enableOption(page: Page, selector: string) {
   const option = page.locator(selector);
   await expect(option).toBeVisible();
   await option.check();
+}
+
+async function clearSelectionFromCanvas(page: Page) {
+  const stage = page.locator('.card-canvas-demo-stage');
+  const stageBox = await getRequiredBox(stage);
+  await page.mouse.click(stageBox.x + 20, stageBox.y + 20);
+  await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+}
+
+async function selectCardByContent(page: Page, id: string) {
+  const card = page.locator(`[data-card-id="${id}"]`);
+  await card.locator('.cards-card-canvas__card-content').dispatchEvent('click');
+  await expect(card).toHaveClass(/cards-card-canvas__card--selected/);
+  await expect(page.locator('[data-card-selected-display]')).toHaveText(id);
 }
 
 test.describe('Demo layout', () => {
@@ -179,7 +390,7 @@ test.describe('CardCanvas selection', () => {
     expect(contentBoxAfter!.height).toBeCloseTo(contentBoxBefore!.height, 0.5);
   });
 
-  test('clears selection when clicking the settings panel', async ({
+  test('does not clear selection when clicking the settings panel', async ({
     page,
   }) => {
     await addCard(page, 'Card A', 'Content A');
@@ -195,10 +406,12 @@ test.describe('CardCanvas selection', () => {
 
     await page.locator('[data-card-title-input]').click();
 
-    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-2'
+    );
     await expect(
       page.locator('.cards-card-canvas__card--selected')
-    ).toHaveCount(0);
+    ).toHaveCount(1);
   });
 
   test('clears selection when clicking a blank area of the canvas stage', async ({
@@ -530,6 +743,272 @@ test.describe('CardCanvas interactions', () => {
     expect(cardBoxAfter!.height).toBeCloseTo(cardBoxBefore!.height, -1);
   });
 
+  test('parent moves descendants by the same drag delta', async ({ page }) => {
+    const hierarchyIds = await createPositionedHierarchy(page);
+
+    const beforeCards = await getCardData(page);
+    const beforeA = getCardDataById(beforeCards, hierarchyIds.parentId);
+    const beforeB = getCardDataById(beforeCards, hierarchyIds.childId);
+    const beforeC = getCardDataById(beforeCards, hierarchyIds.grandchildId);
+    const delta = { x: 80, y: 40 };
+
+    await dragLocatorBy(
+      page,
+      page.locator(
+        `[data-card-id="${hierarchyIds.parentId}"] .cards-card-canvas__card-header`
+      ),
+      delta
+    );
+
+    const afterCards = await getCardData(page);
+    expectCardMovedBy(
+      beforeA,
+      getCardDataById(afterCards, hierarchyIds.parentId),
+      delta
+    );
+    expectCardMovedBy(
+      beforeB,
+      getCardDataById(afterCards, hierarchyIds.childId),
+      delta
+    );
+    expectCardMovedBy(
+      beforeC,
+      getCardDataById(afterCards, hierarchyIds.grandchildId),
+      delta
+    );
+  });
+
+  test('child movement does not move its parent', async ({ page }) => {
+    const hierarchyIds = await createPositionedHierarchy(page);
+
+    const beforeCards = await getCardData(page);
+    const beforeA = getCardDataById(beforeCards, hierarchyIds.parentId);
+    const beforeB = getCardDataById(beforeCards, hierarchyIds.childId);
+    const beforeC = getCardDataById(beforeCards, hierarchyIds.grandchildId);
+    const delta = { x: 70, y: 30 };
+
+    await dragLocatorBy(
+      page,
+      page.locator(
+        `[data-card-id="${hierarchyIds.childId}"] .cards-card-canvas__card-header`
+      ),
+      delta
+    );
+
+    const afterCards = await getCardData(page);
+    const afterA = getCardDataById(afterCards, hierarchyIds.parentId);
+    expect(afterA.x).toBeCloseTo(beforeA.x, 5);
+    expect(afterA.y).toBeCloseTo(beforeA.y, 5);
+    expectCardMovedBy(
+      beforeB,
+      getCardDataById(afterCards, hierarchyIds.childId),
+      delta
+    );
+    expectCardMovedBy(
+      beforeC,
+      getCardDataById(afterCards, hierarchyIds.grandchildId),
+      delta
+    );
+  });
+
+  test('resize parent keeps child and grandchild positions unchanged', async ({
+    page,
+  }) => {
+    const hierarchyIds = await createPositionedHierarchy(page);
+
+    const beforeCards = await getCardData(page);
+    const beforeA = getCardDataById(beforeCards, hierarchyIds.parentId);
+    const beforeB = getCardDataById(beforeCards, hierarchyIds.childId);
+    const beforeC = getCardDataById(beforeCards, hierarchyIds.grandchildId);
+
+    await dragLocatorBy(
+      page,
+      page.locator(`[data-card-id="${hierarchyIds.parentId}"] [data-card-resize-handle]`),
+      { x: 60, y: 30 }
+    );
+
+    const afterCards = await getCardData(page);
+    const afterA = getCardDataById(afterCards, hierarchyIds.parentId);
+    const afterB = getCardDataById(afterCards, hierarchyIds.childId);
+    const afterC = getCardDataById(afterCards, hierarchyIds.grandchildId);
+
+    expect(afterA.width).toBeCloseTo(beforeA.width + 60, 5);
+    expect(afterA.height).toBeCloseTo(beforeA.height + 30, 5);
+    expect(afterB.x).toBeCloseTo(beforeB.x, 5);
+    expect(afterB.y).toBeCloseTo(beforeB.y, 5);
+    expect(afterC.x).toBeCloseTo(beforeC.x, 5);
+    expect(afterC.y).toBeCloseTo(beforeC.y, 5);
+  });
+
+  test('valid parent candidate gets marker during drag', async ({ page }) => {
+    await addCard(page, 'Child', 'Content');
+
+    const card2 = page.locator('[data-card-id="card-2"]');
+    const header2 = card2.locator('.cards-card-canvas__card-header');
+    await dragLocatorBy(page, header2, { x: 300, y: 300 });
+
+    const card1 = page.locator('[data-card-id="card-1"]');
+
+    await dragCardCenterTo(page, { card: card2, handle: header2 }, card1);
+
+    await expect(card1).toHaveAttribute('data-parent-candidate', 'true');
+    await expect(card1).toHaveClass(/cards-card-canvas__card--parent-candidate/);
+
+    await page.mouse.up();
+
+    await expect(card1).not.toHaveAttribute('data-parent-candidate');
+  });
+
+  test('self/descendant candidates never get marker', async ({ page }) => {
+    await addCardWithParent(page, 'card-1', 'Child', 'Content');
+
+    const card1 = page.locator('[data-card-id="card-1"]');
+    const card2 = page.locator('[data-card-id="card-2"]');
+    const handle2 = card2.locator('[data-card-resize-handle]');
+    const header2 = card2.locator('.cards-card-canvas__card-header');
+    await dragLocatorBy(page, handle2, { x: -200, y: -200 });
+    await dragCardCenterTo(page, { card: card2, handle: header2 }, card1);
+    await page.mouse.up();
+
+    const header1 = card1.locator('.cards-card-canvas__card-header');
+
+    await dragLocatorBy(page, header1, { x: 10, y: 10 });
+
+    await expect(card2).not.toHaveAttribute('data-parent-candidate');
+  });
+
+  test('overlapping candidates choose highest zIndex then later array order', async ({ page }) => {
+    await addCard(page, 'Card 2', 'Content');
+
+    const card1 = page.locator('[data-card-id="card-1"]');
+    const card2 = page.locator('[data-card-id="card-2"]');
+
+    const header2 = card2.locator('.cards-card-canvas__card-header');
+
+    const box1 = await getRequiredBox(card1);
+    const box2 = await getRequiredBox(card2);
+
+    await dragLocatorBy(page, header2, { x: box1.x - box2.x, y: box1.y - box2.y });
+
+    await addCard(page, 'Card 3', 'Content');
+    const card3 = page.locator('[data-card-id="card-3"]');
+    const header3 = card3.locator('.cards-card-canvas__card-header');
+
+    await dragLocatorBy(page, header3, { x: 300, y: 300 });
+
+    await dragCardCenterTo(page, { card: card3, handle: header3 }, card1);
+
+    await expect(card2).toHaveAttribute('data-parent-candidate', 'true');
+    await expect(card1).not.toHaveAttribute('data-parent-candidate');
+
+    await page.mouse.up();
+  });
+
+  test('attach parent: drag B center into A and release writes B parent', async ({ page }) => {
+    await addCard(page, 'Card B', 'Content B');
+
+    const cardA = page.locator('[data-card-id="card-1"]');
+    const cardB = page.locator('[data-card-id="card-2"]');
+    const headerB = cardB.locator('.cards-card-canvas__card-header');
+
+    await dragLocatorBy(page, headerB, { x: 320, y: 260 });
+
+    await dragCardCenterTo(page, { card: cardB, handle: headerB }, cardA);
+    const duringDragB = getCardDataById(await getCardData(page), 'card-2');
+    await page.mouse.up();
+
+    const afterCards = await getCardData(page);
+    const afterB = getCardDataById(afterCards, 'card-2');
+
+    expect(afterB.parent).toBe('card-1');
+    expect(afterB.x).toBeCloseTo(duringDragB.x, 5);
+    expect(afterB.y).toBeCloseTo(duringDragB.y, 5);
+  });
+
+  test('detach parent: drag B from inside A out to empty space removes parent property', async ({ page }) => {
+    await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
+
+    const cardB = page.locator('[data-card-id="card-2"]');
+    const headerB = cardB.locator('.cards-card-canvas__card-header');
+    const beforeB = getCardDataById(await getCardData(page), 'card-2');
+    const delta = { x: 520, y: 280 };
+
+    await dragLocatorBy(page, headerB, delta);
+
+    const cards = await getCardData(page);
+    const cardAfterDetach = getCardDataById(cards, 'card-2');
+
+    expectNoParent(cardAfterDetach);
+    expectCardMovedBy(beforeB, cardAfterDetach, delta);
+  });
+
+  test('re-parent: drag B from A into C updates B parent to C', async ({ page }) => {
+    await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
+    await addCard(page, 'Card C', 'Content C');
+
+    const cardB = page.locator('[data-card-id="card-2"]');
+    const headerB = cardB.locator('.cards-card-canvas__card-header');
+    const cardC = page.locator('[data-card-id="card-3"]');
+    const headerC = cardC.locator('.cards-card-canvas__card-header');
+
+    await dragLocatorBy(page, headerC, { x: 520, y: 260 });
+    await dragCardCenterTo(page, { card: cardB, handle: headerB }, cardC);
+    const duringDragB = getCardDataById(await getCardData(page), 'card-2');
+    await page.mouse.up();
+
+    const cards = await getCardData(page);
+    const afterB = getCardDataById(cards, 'card-2');
+    expect(afterB.parent).toBe('card-3');
+    expect(afterB.x).toBeCloseTo(duringDragB.x, 5);
+    expect(afterB.y).toBeCloseTo(duringDragB.y, 5);
+  });
+
+  test('prevent cycle: dragging A over its descendant keeps A without parent', async ({ page }) => {
+    await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
+
+    const cardA = page.locator('[data-card-id="card-1"]');
+    const headerA = cardA.locator('.cards-card-canvas__card-header');
+    const cardB = page.locator('[data-card-id="card-2"]');
+    const headerB = cardB.locator('.cards-card-canvas__card-header');
+
+    await dragCardCenterTo(page, { card: cardB, handle: headerB }, cardA);
+    await page.mouse.up();
+    await dragLocatorBy(page, headerA, { x: 8, y: 8 });
+
+    const cards = await getCardData(page);
+    const cardAfterCycleAttempt = getCardDataById(cards, 'card-1');
+
+    expectNoParent(cardAfterCycleAttempt);
+    expect(getCardDataById(cards, 'card-2').parent).toBe('card-1');
+  });
+
+  test('attach parent: overlapping candidates choose zIndex winner on release', async ({ page }) => {
+    await addCard(page, 'Card 2', 'Content');
+
+    const card1 = page.locator('[data-card-id="card-1"]');
+    const card2 = page.locator('[data-card-id="card-2"]');
+    const header2 = card2.locator('.cards-card-canvas__card-header');
+    const box1 = await getRequiredBox(card1);
+    const box2 = await getRequiredBox(card2);
+
+    await dragLocatorBy(page, header2, { x: box1.x - box2.x, y: box1.y - box2.y });
+
+    await addCard(page, 'Card 3', 'Content');
+    const card3 = page.locator('[data-card-id="card-3"]');
+    const header3 = card3.locator('.cards-card-canvas__card-header');
+
+    await dragLocatorBy(page, header3, { x: 320, y: 260 });
+    await dragCardCenterTo(page, { card: card3, handle: header3 }, card1);
+    const duringDragCard3 = getCardDataById(await getCardData(page), 'card-3');
+    await page.mouse.up();
+
+    const cards = await getCardData(page);
+    const afterCard3 = getCardDataById(cards, 'card-3');
+    expect(afterCard3.parent).toBe('card-2');
+    expect(afterCard3.x).toBeCloseTo(duringDragCard3.x, 5);
+    expect(afterCard3.y).toBeCloseTo(duringDragCard3.y, 5);
+  });
+
   test('clamps resize to the minimum card size', async ({ page }) => {
     const { card, handle } = getCardParts(page);
 
@@ -599,5 +1078,276 @@ test.describe('CardCanvas interactions', () => {
     expect(cardBoxAfter).not.toBeNull();
     expect(cardBoxAfter!.x).toBeCloseTo(cardBoxBefore!.x + 60, -1);
     expect(cardBoxAfter!.y).toBeCloseTo(cardBoxBefore!.y + 40, -1);
+  });
+});
+
+test.describe('CardCanvas hierarchy regressions', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  test('requires selection before moving a parent hierarchy when the option is enabled', async ({
+    page,
+  }) => {
+    const hierarchyIds = await createPositionedHierarchy(page);
+    await clearSelectionFromCanvas(page);
+    await enableOption(page, '[data-card-require-selection-toggle]');
+
+    const beforeCards = await getCardData(page);
+    const beforeParent = getCardDataById(beforeCards, hierarchyIds.parentId);
+    const beforeChild = getCardDataById(beforeCards, hierarchyIds.childId);
+    const beforeGrandchild = getCardDataById(beforeCards, hierarchyIds.grandchildId);
+    const parentCard = page.locator(`[data-card-id="${hierarchyIds.parentId}"]`);
+    const parentHandle = parentCard.locator('[data-card-resize-handle]');
+
+    await expect(parentHandle).toBeHidden();
+    await dragLocatorBy(
+      page,
+      parentCard.locator('.cards-card-canvas__card-header'),
+      { x: 80, y: 40 }
+    );
+
+    const afterCards = await getCardData(page);
+    const afterParent = getCardDataById(afterCards, hierarchyIds.parentId);
+    const afterChild = getCardDataById(afterCards, hierarchyIds.childId);
+    const afterGrandchild = getCardDataById(afterCards, hierarchyIds.grandchildId);
+
+    expectCardPositionUnchanged(beforeParent, afterParent);
+    expectCardPositionUnchanged(beforeChild, afterChild);
+    expectCardPositionUnchanged(beforeGrandchild, afterGrandchild);
+    expect(afterParent.width).toBeCloseTo(beforeParent.width, 5);
+    expect(afterParent.height).toBeCloseTo(beforeParent.height, 5);
+    expect(afterChild.parent).toBe(hierarchyIds.parentId);
+    expect(afterGrandchild.parent).toBe(hierarchyIds.childId);
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+  });
+
+  test('moves selected parent and descendants when selection is required', async ({
+    page,
+  }) => {
+    const hierarchyIds = await createPositionedHierarchy(page);
+    await enableOption(page, '[data-card-require-selection-toggle]');
+    await selectCardByContent(page, hierarchyIds.parentId);
+
+    const beforeCards = await getCardData(page);
+    const beforeParent = getCardDataById(beforeCards, hierarchyIds.parentId);
+    const beforeChild = getCardDataById(beforeCards, hierarchyIds.childId);
+    const beforeGrandchild = getCardDataById(beforeCards, hierarchyIds.grandchildId);
+    const delta = { x: 80, y: 40 };
+
+    await dragLocatorBy(
+      page,
+      page.locator(
+        `[data-card-id="${hierarchyIds.parentId}"] .cards-card-canvas__card-header`
+      ),
+      delta
+    );
+
+    const afterCards = await getCardData(page);
+    const afterChild = getCardDataById(afterCards, hierarchyIds.childId);
+    const afterGrandchild = getCardDataById(afterCards, hierarchyIds.grandchildId);
+
+    expectCardMovedBy(
+      beforeParent,
+      getCardDataById(afterCards, hierarchyIds.parentId),
+      delta
+    );
+    expectCardMovedBy(beforeChild, afterChild, delta);
+    expectCardMovedBy(beforeGrandchild, afterGrandchild, delta);
+    expect(afterChild.parent).toBe(hierarchyIds.parentId);
+    expect(afterGrandchild.parent).toBe(hierarchyIds.childId);
+  });
+
+  test('selects the dragged hierarchy card after move end when the option is enabled', async ({
+    page,
+  }) => {
+    const hierarchyIds = await createPositionedHierarchy(page);
+    await clearSelectionFromCanvas(page);
+    await enableOption(page, '[data-card-select-on-move-end-toggle]');
+
+    const beforeCards = await getCardData(page);
+    const beforeChild = getCardDataById(beforeCards, hierarchyIds.childId);
+    const beforeGrandchild = getCardDataById(beforeCards, hierarchyIds.grandchildId);
+    const selectCountBefore = Number.parseInt(
+      await page.locator('[data-card-select-count]').innerText(),
+      10
+    );
+    const delta = { x: 20, y: 10 };
+
+    await dragLocatorBy(
+      page,
+      page.locator(
+        `[data-card-id="${hierarchyIds.childId}"] .cards-card-canvas__card-header`
+      ),
+      delta
+    );
+
+    const afterCards = await getCardData(page);
+    const afterChild = getCardDataById(afterCards, hierarchyIds.childId);
+    const afterGrandchild = getCardDataById(afterCards, hierarchyIds.grandchildId);
+
+    expectCardMovedBy(beforeChild, afterChild, delta);
+    expectCardMovedBy(beforeGrandchild, afterGrandchild, delta);
+    expect(afterChild.parent).toBe(hierarchyIds.parentId);
+    expect(afterGrandchild.parent).toBe(hierarchyIds.childId);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      hierarchyIds.childId
+    );
+    const selectCountAfter = Number.parseInt(
+      await page.locator('[data-card-select-count]').innerText(),
+      10
+    );
+    expect(selectCountAfter).toBeGreaterThan(selectCountBefore);
+  });
+
+  test('keeps selection stable after drag-like content and header movement in a hierarchy', async ({
+    page,
+  }) => {
+    const hierarchyIds = await createPositionedHierarchy(page);
+    await enableOption(page, '[data-card-require-selection-toggle]');
+    await selectCardByContent(page, hierarchyIds.parentId);
+
+    const childCard = page.locator(`[data-card-id="${hierarchyIds.childId}"]`);
+    const childContent = childCard.locator('.cards-card-canvas__card-content');
+    const childHeader = childCard.locator('.cards-card-canvas__card-header');
+    const beforeCards = await getCardData(page);
+    const beforeChild = getCardDataById(beforeCards, hierarchyIds.childId);
+
+    await dragLocatorBy(page, childContent, { x: 12, y: 0 });
+    await dragLocatorBy(page, childHeader, { x: 12, y: 0 });
+
+    const afterCards = await getCardData(page);
+    const afterChild = getCardDataById(afterCards, hierarchyIds.childId);
+
+    expectCardPositionUnchanged(beforeChild, afterChild);
+    expect(afterChild.parent).toBe(hierarchyIds.parentId);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      hierarchyIds.parentId
+    );
+    await expect(childCard).not.toHaveClass(/cards-card-canvas__card--selected/);
+  });
+
+  test('keeps resize independent from parent attachment and child movement', async ({
+    page,
+  }) => {
+    const hierarchyIds = await createPositionedHierarchy(page);
+    await enableOption(page, '[data-card-require-selection-toggle]');
+    await selectCardByContent(page, hierarchyIds.parentId);
+
+    const beforeCards = await getCardData(page);
+    const beforeParent = getCardDataById(beforeCards, hierarchyIds.parentId);
+    const beforeChild = getCardDataById(beforeCards, hierarchyIds.childId);
+    const beforeGrandchild = getCardDataById(beforeCards, hierarchyIds.grandchildId);
+    const parentCard = page.locator(`[data-card-id="${hierarchyIds.parentId}"]`);
+
+    await dragLocatorBy(page, parentCard.locator('[data-card-resize-handle]'), {
+      x: 60,
+      y: 30,
+    });
+
+    const afterCards = await getCardData(page);
+    const afterParent = getCardDataById(afterCards, hierarchyIds.parentId);
+    const afterChild = getCardDataById(afterCards, hierarchyIds.childId);
+    const afterGrandchild = getCardDataById(afterCards, hierarchyIds.grandchildId);
+
+    expect(afterParent.width).toBeCloseTo(beforeParent.width + 60, 5);
+    expect(afterParent.height).toBeCloseTo(beforeParent.height + 30, 5);
+    expectNoParent(afterParent);
+    expectCardPositionUnchanged(beforeChild, afterChild);
+    expectCardPositionUnchanged(beforeGrandchild, afterGrandchild);
+    expect(afterChild.parent).toBe(hierarchyIds.parentId);
+    expect(afterGrandchild.parent).toBe(hierarchyIds.childId);
+    await expect(parentCard).not.toHaveAttribute('data-parent-candidate');
+  });
+});
+
+test.describe('CardCanvas Delete Selected', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  test('leaf delete: select a single card, click delete, assert card gone and selection cleared', async ({ page }) => {
+    await addCard(page, 'Card A', 'Content A');
+    await addCard(page, 'Card B', 'Content B');
+
+    const firstCard = page.locator('[data-card-id="card-1"]');
+    const secondCard = page.locator('[data-card-id="card-2"]');
+
+    await expect(firstCard).toBeVisible();
+    await expect(secondCard).toBeVisible();
+
+    const header2 = secondCard.locator('.cards-card-canvas__card-header');
+    await dragLocatorBy(page, header2, { x: 300, y: 0 });
+
+    await firstCard.locator('.cards-card-canvas__card-content').dispatchEvent('click');
+    await expect(firstCard).toHaveClass(/cards-card-canvas__card--selected/);
+
+    await page.getByTestId('delete-selected-card').click();
+    await expect(firstCard).toHaveCount(0);
+    await expect(secondCard).toBeVisible();
+
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+  });
+
+  test('parent cascade with dialog accept: create A with child B, select A, accept confirm, assert A/B gone and unrelated card remains', async ({ page }) => {
+    await addCard(page, 'Card A', 'Content A');
+    await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
+
+    const cardA = page.locator('[data-card-id="card-1"]');
+    const cardB = page.locator('[data-card-id="card-2"]');
+
+    await cardA.locator('.cards-card-canvas__card-content').dispatchEvent('click');
+    await expect(cardA).toHaveClass(/cards-card-canvas__card--selected/);
+
+    await addCard(page, 'Card C', 'Content C');
+    const cardC = page.locator('[data-card-id="card-3"]');
+    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+
+    page.once('dialog', async (dialog) => {
+      expect(dialog.message()).toBe('Delete this card and its child cards?');
+      await dialog.accept();
+    });
+    await page.getByTestId('delete-selected-card').click();
+
+    await expect(cardA).toHaveCount(0);
+    await expect(cardB).toHaveCount(0);
+    await expect(cardC).toBeVisible();
+
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+  });
+
+  test('parent delete abort with dialog dismiss: same setup, dismiss confirm, assert A/B and selection unchanged', async ({ page }) => {
+    await addCard(page, 'Card A', 'Content A');
+    await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
+
+    const cardA = page.locator('[data-card-id="card-1"]');
+    const cardB = page.locator('[data-card-id="card-2"]');
+
+    await cardA.locator('.cards-card-canvas__card-content').dispatchEvent('click');
+    await expect(cardA).toHaveClass(/cards-card-canvas__card--selected/);
+
+    page.once('dialog', async (dialog) => {
+      expect(dialog.message()).toBe('Delete this card and its child cards?');
+      await dialog.dismiss();
+    });
+    await page.getByTestId('delete-selected-card').click();
+
+    await expect(cardA).toBeVisible();
+    await expect(cardB).toBeVisible();
+
+    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+  });
+
+  test('selection cleanup after successful delete: assert data-card-selected-display reflects cleared selection', async ({ page }) => {
+    await addCard(page, 'Card A', 'Content A');
+    const firstCard = page.locator('[data-card-id="card-1"]');
+
+    await firstCard.locator('.cards-card-canvas__card-content').click();
+    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+
+    await page.getByTestId('delete-selected-card').click();
+
+    await expect(firstCard).toHaveCount(0);
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
   });
 });

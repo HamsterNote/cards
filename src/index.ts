@@ -6,3 +6,5 @@ export type {
   CardCanvasOptions,
   CardCanvasProps,
 } from './components/CardCanvas';
+export { deleteCards } from './utils/cards';
+export type { DeleteCardsCallback, DeleteCardsMeta } from './utils/cards';
