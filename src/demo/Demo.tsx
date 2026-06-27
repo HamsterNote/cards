@@ -4,22 +4,28 @@ import type { CardCanvasCard } from '../index';
 
 export function Demo() {
   const [cards, setCards] = useState<CardCanvasCard[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [selectEventCount, setSelectEventCount] = useState(0);
   const [newCardTitle, setNewCardTitle] = useState('');
   const [newCardContent, setNewCardContent] = useState('');
   const [newCardTitleBg, setNewCardTitleBg] = useState('#f9fafb');
   const [newCardContentBg, setNewCardContentBg] = useState('#ffffff');
+  const [requireSelectionToMoveResize, setRequireSelectionToMoveResize] = useState(false);
+  const [selectOnMoveEnd, setSelectOnMoveEnd] = useState(false);
 
   const handleAddCard = () => {
     if (!newCardTitle.trim() || !newCardContent.trim()) return;
 
+    const nextIndex = cards.length + 1;
     const newCard: CardCanvasCard = {
-      id: Date.now().toString(36),
+      id: `card-${nextIndex}`,
       title: newCardTitle,
       content: newCardContent,
       x: 0,
       y: 0,
       width: 180,
       height: 120,
+      zIndex: nextIndex,
       titleStyle: { backgroundColor: newCardTitleBg },
       contentStyle: { backgroundColor: newCardContentBg },
     };
@@ -27,6 +33,15 @@ export function Demo() {
     setCards([...cards, newCard]);
     setNewCardTitle('');
     setNewCardContent('');
+  };
+
+  const handleSelect = (id: string) => {
+    setSelected([id]);
+    setSelectEventCount((count) => count + 1);
+  };
+
+  const handleClearSelection = () => {
+    setSelected([]);
   };
 
   return (
@@ -81,6 +96,28 @@ export function Demo() {
                 onChange={(e) => setNewCardContentBg(e.target.value)}
               />
             </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-require-selection-toggle
+                  checked={requireSelectionToMoveResize}
+                  onChange={(e) => setRequireSelectionToMoveResize(e.target.checked)}
+                />
+                Require selection before move/resize
+              </label>
+            </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-select-on-move-end-toggle
+                  checked={selectOnMoveEnd}
+                  onChange={(e) => setSelectOnMoveEnd(e.target.checked)}
+                />
+                Select moved card after drag
+              </label>
+            </div>
             <Button
               data-card-add-button
               variant="filled"
@@ -95,16 +132,31 @@ export function Demo() {
               <CardCanvas
                 cards={cards}
                 onCardsChange={setCards}
+                selected={selected}
+                onSelect={handleSelect}
+                onClearSelection={handleClearSelection}
                 className="card-canvas-demo-transform"
+                options={{ requireSelectionToMoveResize, selectOnMoveEnd }}
+                renderCardTitle={(title: string) => <span data-card-rendered-title>{title}</span>}
+                renderCardContent={(content: string) => <span data-card-rendered-content>{content}</span>}
               />
             </div>
           </div>
         </div>
-        <div className="demo__data-display" data-card-data-display>
-          <h3 className="demo__data-display-title">Current Cards Data</h3>
-          <pre className="demo__data-display-content">
+        <details className="demo__data-display" data-card-data-display open>
+          <summary className="demo__data-display-title" data-card-data-toggle>
+            Current Cards Data
+          </summary>
+          <pre className="demo__data-display-content" data-card-data-content>
             {JSON.stringify(cards, null, 2)}
           </pre>
+        </details>
+        <div className="demo__data-display" data-card-selection-display>
+          <h3 className="demo__data-display-title">Selection</h3>
+          <div className="demo__data-display-content">
+            <div data-card-selected-display>{selected.join(', ')}</div>
+            <div data-card-select-count>{selectEventCount}</div>
+          </div>
         </div>
       </section>
     </main>

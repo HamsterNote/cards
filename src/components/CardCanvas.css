@@ -25,6 +25,19 @@
   overflow: hidden;
   /* Prevent text selection during drag */
   user-select: none;
+  transition:
+    border-color 0.2s ease,
+    outline-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.cards-card-canvas__card--selected {
+  outline: 2px solid rgba(59, 130, 246, 0.6);
+  outline-offset: 2px;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0 0 0 4px rgba(59, 130, 246, 0.15);
 }
 
 .cards-card-canvas__card-header {
@@ -33,18 +46,19 @@
   font-weight: 500;
   font-size: 14px;
   background-color: #f9fafb;
-  cursor: grab;
-}
-
-.cards-card-canvas__card-header:active {
-  cursor: grabbing;
+  cursor: default;
 }
 
 .cards-card-canvas__card-content {
+  appearance: none;
+  border: 0;
+  background: transparent;
   padding: 12px;
   flex: 1;
   overflow: auto;
   font-size: 14px;
+  font-family: inherit;
+  text-align: left;
   color: #374151;
 }
 
@@ -56,7 +70,6 @@
   height: 20px;
   cursor: se-resize;
   touch-action: none;
-  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,4 +82,8 @@
   height: 6px;
   border-right: 2px solid rgba(0, 0, 0, 0.2);
   border-bottom: 2px solid rgba(0, 0, 0, 0.2);
+}
+
+.cards-card-canvas__resize-handle--hidden {
+  display: none;
 }
