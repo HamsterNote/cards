@@ -21,6 +21,10 @@ import {
   findTopmostLinkTargetId,
   resolveLinkedCards,
 } from '../utils/card-links';
+import {
+  getMindMapLayoutMode,
+  normalizeMindMapLayout,
+} from '../utils/card-layout';
 
 export interface CardCanvasItemProps {
   readonly card: CardCanvasCard;
@@ -369,15 +373,21 @@ export function CardCanvasItem({
             movingCardIds
           );
 
-          // 归入父级后，扩展父卡片使子卡片完全包含在其 content 区域内
           const assignedCard = assignmentResult.draggedCard;
           let finalCards = assignmentResult.cards;
           if (assignedCard?.parent) {
-            finalCards = expandParentToContainChildren(
-              finalCards,
-              assignedCard.parent,
-              measureContentInset()
+            const parentCard = finalCards.find(
+              (candidate) => candidate.id === assignedCard.parent
             );
+            finalCards =
+              parentCard !== undefined &&
+              getMindMapLayoutMode(parentCard) === 'mind-map-horizontal'
+                ? normalizeMindMapLayout(finalCards)
+                : expandParentToContainChildren(
+                    finalCards,
+                    assignedCard.parent,
+                    measureContentInset()
+                  );
           }
 
           if (assignedCard !== undefined) {

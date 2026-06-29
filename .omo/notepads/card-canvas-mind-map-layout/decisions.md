@@ -16,3 +16,5 @@
 - Re-verified outside click clears the selection even when interacting with the popover controls, using a Playwright regression test.
 - Added pointer-events: auto to the Demo Popover content inline style so the mode select can be clicked. The wrapper .cards-card-canvas__popover uses pointer-events: none to let clicks fall through to the canvas.
 - Re-verified outside click clears the selection even when interacting with the popover controls, using a Playwright regression test.
+- Todo 4 keeps drag-end parent assignment event-scoped in `CardCanvasItem.tsx`: only assigned mind-map parents are normalized immediately, detached cards are left as the existing assignment result, and free/missing-mode parents retain the existing content-inset expansion path.
+- Todo 4 E2E coverage lives in `tests/e2e/card-canvas-mind-map.spec.ts` with frozen fixtures for mind-map attach, free-parent attach expansion regression, and re-parenting between mind-map parents.

@@ -1,8 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
   addCardWithParent,
+  cardLocatorSelector,
+  dragCardCenterToPoint,
   getCardData,
   getCardDataById,
+  getRequiredBox,
   type CardDataSnapshot,
   waitForAnimationFrame,
 } from './helpers';
@@ -87,6 +90,37 @@ function expectedChildY(
   }
 
   return slotTop;
+}
+
+function expectNoVerticalOverlap(cards: readonly CardDataSnapshot[]): void {
+  for (let index = 1; index < cards.length; index += 1) {
+    const previous = cards[index - 1];
+    const current = cards[index];
+    if (previous === undefined || current === undefined) {
+      throw new Error(`Missing sibling while checking overlap at ${index}`);
+    }
+
+    expect(current.y).toBeGreaterThanOrEqual(previous.y + previous.height);
+  }
+}
+
+async function dragCardCenterOntoCard(
+  page: Page,
+  draggedCardId: string,
+  targetCardId: string
+): Promise<void> {
+  const draggedCard = page.locator(cardLocatorSelector(draggedCardId));
+  const draggedHandle = draggedCard.locator('.cards-card-canvas__card-header');
+  await draggedHandle.scrollIntoViewIfNeeded();
+  const targetBox = await getRequiredBox(page.locator(cardLocatorSelector(targetCardId)));
+  await dragCardCenterToPoint(
+    page,
+    { card: draggedCard, handle: draggedHandle },
+    {
+      x: targetBox.x + targetBox.width / 2,
+      y: targetBox.y + targetBox.height / 2,
+    }
+  );
 }
 
 async function selectCard(page: Page, cardId: string): Promise<void> {
@@ -321,5 +355,129 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(getCardDataById(cards, branch.id).parent).toBe(root.id);
     const after = getCardDataById(cards, rootSibling.id);
     expect(after.y).not.toBeCloseTo(before.y, 5);
+  });
+
+  test('attaches a free card into a mind-map parent without expanding the parent', async ({
+    page,
+  }) => {
+    // Given: a frozen mind-map parent already owns siblings and a separate free card.
+    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const first = Object.freeze({ ...childCard, id: 'first-child', height: 80 });
+    const second = Object.freeze({ ...childCard, id: 'second-child', height: 90 });
+    const free = Object.freeze({
+      ...childCard,
+      id: 'free-child',
+      parent: undefined,
+      x: 620,
+      y: 360,
+      height: 100,
+    });
+    await loadFrozenCards(page, [parent, first, second, free]);
+    await waitForAnimationFrame(page);
+    const beforeParent = getCardDataById(await getCardData(page), parent.id);
+
+    // When: the free card is dropped onto the mind-map parent.
+    await dragCardCenterOntoCard(page, free.id, parent.id);
+    await waitForAnimationFrame(page);
+
+    // Then: hierarchy is written, parent dimensions are stable, and siblings reflow to the right.
+    const cards = await getCardData(page);
+    const parentAfter = getCardDataById(cards, parent.id);
+    const firstAfter = getCardDataById(cards, first.id);
+    const secondAfter = getCardDataById(cards, second.id);
+    const freeAfter = getCardDataById(cards, free.id);
+    expect(freeAfter.parent).toBe(parent.id);
+    expect(parentAfter.width).toBeCloseTo(beforeParent.width, 5);
+    expect(parentAfter.height).toBeCloseTo(beforeParent.height, 5);
+    expect(freeAfter.x).toBeGreaterThan(parentAfter.x + parentAfter.width);
+    expect(firstAfter.x).toBeCloseTo(expectedChildX(parentAfter), 5);
+    expect(secondAfter.x).toBeCloseTo(expectedChildX(parentAfter), 5);
+    expect(freeAfter.x).toBeCloseTo(expectedChildX(parentAfter), 5);
+    expect(firstAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second, free], 0), 5);
+    expect(secondAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second, free], 1), 5);
+    expect(freeAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second, free], 2), 5);
+    expectNoVerticalOverlap([firstAfter, secondAfter, freeAfter]);
+  });
+
+  test('keeps containment expansion when attaching to a free parent', async ({
+    page,
+  }) => {
+    // Given: a frozen free parent and a large free card that will protrude after drop.
+    const freeParent = Object.freeze({ ...parentCard });
+    const freeChild = Object.freeze({
+      ...childCard,
+      id: 'free-mode-child',
+      parent: undefined,
+      x: 560,
+      y: 340,
+      width: 180,
+      height: 140,
+    });
+    await loadFrozenCards(page, [freeParent, freeChild]);
+    const parentBefore = getCardDataById(await getCardData(page), freeParent.id);
+    const child = page.locator(cardLocatorSelector(freeChild.id));
+    await child.locator('.cards-card-canvas__card-header').scrollIntoViewIfNeeded();
+    const parentBox = await getRequiredBox(page.locator(cardLocatorSelector(freeParent.id)));
+
+    // When: the child center is dropped near the free parent's bottom-right interior.
+    await dragCardCenterToPoint(
+      page,
+      { card: child, handle: child.locator('.cards-card-canvas__card-header') },
+      { x: parentBox.x + parentBox.width - 4, y: parentBox.y + parentBox.height - 4 }
+    );
+
+    // Then: the legacy free-mode attach path still expands the parent to contain the child.
+    const cards = await getCardData(page);
+    const parentAfter = getCardDataById(cards, freeParent.id);
+    const childAfter = getCardDataById(cards, freeChild.id);
+    expect(childAfter.parent).toBe(freeParent.id);
+    expect(parentAfter.width).toBeGreaterThan(parentBefore.width);
+    expect(parentAfter.height).toBeGreaterThan(parentBefore.height);
+  });
+
+  test('re-parents a child between mind-map parents and reflows both sibling groups', async ({
+    page,
+  }) => {
+    // Given: two frozen mind-map parents each have direct children.
+    const oldParent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const stayingChild = Object.freeze({ ...childCard, id: 'staying-child', height: 80 });
+    const movingChild = Object.freeze({ ...childCard, id: 'moving-child', height: 110 });
+    const newParent = Object.freeze({
+      ...parentCard,
+      id: 'new-parent',
+      title: 'New Parent',
+      x: 560,
+      y: 100,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const newSibling = Object.freeze({
+      ...childCard,
+      id: 'new-sibling',
+      parent: newParent.id,
+      height: 90,
+    });
+    await loadFrozenCards(page, [oldParent, stayingChild, movingChild, newParent, newSibling]);
+    await waitForAnimationFrame(page);
+
+    // When: a child from the old parent is dropped onto the new mind-map parent.
+    await dragCardCenterOntoCard(page, movingChild.id, newParent.id);
+    await waitForAnimationFrame(page);
+
+    // Then: the old group collapses to one centered child and the new group is laid out together.
+    const cards = await getCardData(page);
+    const oldParentAfter = getCardDataById(cards, oldParent.id);
+    const newParentAfter = getCardDataById(cards, newParent.id);
+    const stayingAfter = getCardDataById(cards, stayingChild.id);
+    const movingAfter = getCardDataById(cards, movingChild.id);
+    const newSiblingAfter = getCardDataById(cards, newSibling.id);
+    expect(movingAfter.parent).toBe(newParent.id);
+    expect(stayingAfter.parent).toBe(oldParent.id);
+    expect(stayingAfter.x).toBeCloseTo(expectedChildX(oldParentAfter), 5);
+    expect(stayingAfter.y).toBeCloseTo(expectedChildY(oldParentAfter, [stayingChild], 0), 5);
+    expect(movingAfter.x).toBeCloseTo(expectedChildX(newParentAfter), 5);
+    expect(newSiblingAfter.x).toBeCloseTo(expectedChildX(newParentAfter), 5);
+    expect(movingAfter.y).toBeCloseTo(expectedChildY(newParentAfter, [movingChild, newSibling], 0), 5);
+    expect(newSiblingAfter.y).toBeCloseTo(expectedChildY(newParentAfter, [movingChild, newSibling], 1), 5);
+    expectNoVerticalOverlap([movingAfter, newSiblingAfter]);
   });
 });
