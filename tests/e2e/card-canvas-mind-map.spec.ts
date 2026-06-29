@@ -3,6 +3,9 @@ import {
   addCardWithParent,
   cardLocatorSelector,
   dragCardCenterToPoint,
+  dragLocatorBy,
+  expectCardMovedBy,
+  expectNoParent,
   getCardData,
   getCardDataById,
   getRequiredBox,
@@ -479,5 +482,149 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(movingAfter.y).toBeCloseTo(expectedChildY(newParentAfter, [movingChild, newSibling], 0), 5);
     expect(newSiblingAfter.y).toBeCloseTo(expectedChildY(newParentAfter, [movingChild, newSibling], 1), 5);
     expectNoVerticalOverlap([movingAfter, newSiblingAfter]);
+  });
+
+  test('snaps a small empty-canvas drag of a managed child back to mind-map layout', async ({
+    page,
+  }) => {
+    // Given: a mind-map parent owns two managed children in canonical positions.
+    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const movingChild = Object.freeze({ ...childCard, id: 'small-drag-child', height: 90 });
+    const sibling = Object.freeze({ ...childCard, id: 'small-drag-sibling', height: 110 });
+    await loadFrozenCards(page, [parent, movingChild, sibling]);
+    await waitForAnimationFrame(page);
+    const beforeCards = await getCardData(page);
+    const parentBefore = getCardDataById(beforeCards, parent.id);
+
+    // When: the child moves less than the detach threshold and is released over empty canvas.
+    await dragLocatorBy(
+      page,
+      page.locator(`${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`),
+      { x: 20, y: 10 }
+    );
+    await waitForAnimationFrame(page);
+
+    // Then: it keeps its parent and returns to the canonical sibling slot.
+    const cards = await getCardData(page);
+    const childAfter = getCardDataById(cards, movingChild.id);
+    const siblingAfter = getCardDataById(cards, sibling.id);
+    expect(childAfter.parent).toBe(parent.id);
+    expect(childAfter.x).toBeCloseTo(expectedChildX(parentBefore), 5);
+    expect(childAfter.y).toBeCloseTo(expectedChildY(parentBefore, [movingChild, sibling], 0), 5);
+    expect(siblingAfter.y).toBeCloseTo(expectedChildY(parentBefore, [movingChild, sibling], 1), 5);
+  });
+
+  test('detaches a large empty-canvas drag of a managed child and reflows old siblings', async ({
+    page,
+  }) => {
+    // Given: a managed child and a sibling are laid out by a mind-map parent.
+    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const movingChild = Object.freeze({ ...childCard, id: 'large-drag-child', height: 90 });
+    const sibling = Object.freeze({ ...childCard, id: 'large-drag-sibling', height: 110 });
+    await loadFrozenCards(page, [parent, movingChild, sibling]);
+    await waitForAnimationFrame(page);
+    const beforeCards = await getCardData(page);
+    const parentBefore = getCardDataById(beforeCards, parent.id);
+    const movingBefore = getCardDataById(beforeCards, movingChild.id);
+
+    // When: the child moves past the detach threshold and is released over empty canvas.
+    await dragLocatorBy(
+      page,
+      page.locator(`${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`),
+      { x: 80, y: 0 }
+    );
+    await waitForAnimationFrame(page);
+
+    // Then: the child keeps the release coordinates while the old parent's remaining child reflows.
+    const cards = await getCardData(page);
+    const movingAfter = getCardDataById(cards, movingChild.id);
+    const siblingAfter = getCardDataById(cards, sibling.id);
+    expectNoParent(movingAfter);
+    expect(movingAfter.x).toBeCloseTo(movingBefore.x + 80, 5);
+    expect(movingAfter.y).toBeCloseTo(movingBefore.y, 5);
+    expect(siblingAfter.parent).toBe(parent.id);
+    expect(siblingAfter.x).toBeCloseTo(expectedChildX(parentBefore), 5);
+    expect(siblingAfter.y).toBeCloseTo(expectedChildY(parentBefore, [sibling], 0), 5);
+  });
+
+  test('re-parents a managed child over a valid parent even below detach threshold', async ({
+    page,
+  }) => {
+    // Given: the new mind-map parent begins just outside the dragged child's start point.
+    const oldParent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const movingChild = Object.freeze({ ...childCard, id: 'threshold-reparent-child', height: 90 });
+    const oldSibling = Object.freeze({ ...childCard, id: 'threshold-old-sibling', height: 100 });
+    const newParent = Object.freeze({
+      ...parentCard,
+      id: 'threshold-new-parent',
+      title: 'Threshold New Parent',
+      x: 470,
+      y: 80,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    await loadFrozenCards(page, [oldParent, movingChild, oldSibling, newParent]);
+    await waitForAnimationFrame(page);
+
+    // When: a below-threshold move releases the child over that valid parent candidate.
+    await dragLocatorBy(
+      page,
+      page.locator(`${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`),
+      { x: 20, y: 10 }
+    );
+    await waitForAnimationFrame(page);
+
+    // Then: re-parenting wins over snap-back threshold handling.
+    const cards = await getCardData(page);
+    const oldParentAfter = getCardDataById(cards, oldParent.id);
+    const newParentAfter = getCardDataById(cards, newParent.id);
+    const movingAfter = getCardDataById(cards, movingChild.id);
+    const oldSiblingAfter = getCardDataById(cards, oldSibling.id);
+    expect(movingAfter.parent).toBe(newParent.id);
+    expect(oldSiblingAfter.parent).toBe(oldParent.id);
+    expect(oldSiblingAfter.y).toBeCloseTo(expectedChildY(oldParentAfter, [oldSibling], 0), 5);
+    expect(movingAfter.x).toBeCloseTo(expectedChildX(newParentAfter), 5);
+    expect(movingAfter.y).toBeCloseTo(expectedChildY(newParentAfter, [movingChild], 0), 5);
+  });
+
+  test('moves a dragged mind-map parent and all descendants by the exact delta', async ({
+    page,
+  }) => {
+    // Given: a root mind-map parent has children and a nested grandchild branch.
+    const root = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const branch = Object.freeze({
+      ...childCard,
+      id: 'delta-branch',
+      height: 90,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const rootSibling = Object.freeze({ ...childCard, id: 'delta-root-sibling', height: 100 });
+    const grandchild = Object.freeze({
+      ...childCard,
+      id: 'delta-grandchild',
+      parent: branch.id,
+      height: 80,
+    });
+    await loadFrozenCards(page, [root, branch, rootSibling, grandchild]);
+    await waitForAnimationFrame(page);
+    const beforeCards = await getCardData(page);
+
+    // When: the root parent is dragged by a fixed canvas delta.
+    const delta = { x: 100, y: 20 };
+    await dragLocatorBy(
+      page,
+      page.locator(`${cardLocatorSelector(root.id)} .cards-card-canvas__card-header`),
+      delta
+    );
+    await waitForAnimationFrame(page);
+
+    // Then: parent, children, and grandchild all receive exactly the same persisted delta.
+    const afterCards = await getCardData(page);
+    for (const cardId of [root.id, branch.id, rootSibling.id, grandchild.id]) {
+      expectCardMovedBy(
+        getCardDataById(beforeCards, cardId),
+        getCardDataById(afterCards, cardId),
+        delta
+      );
+    }
   });
 });

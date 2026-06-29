@@ -23,6 +23,7 @@ import {
 } from '../utils/card-links';
 import {
   getMindMapLayoutMode,
+  MIND_MAP_DETACH_THRESHOLD,
   normalizeMindMapLayout,
 } from '../utils/card-layout';
 
@@ -365,11 +366,16 @@ export function CardCanvasItem({
         );
         const movingCardIds = new Set<string>(dragPositionSnapshot.keys());
 
-        if (draggedCard !== undefined && pointerPointRef.current !== undefined) {
+        const assignParentAtPointer = (): CardCanvasCard[] => {
+          const pointerPoint = pointerPointRef.current;
+          if (pointerPoint === undefined) {
+            return cardsRef.current;
+          }
+
           const assignmentResult = assignParentFromPoint(
             cardsRef.current,
             cardId,
-            pointerPointRef.current,
+            pointerPoint,
             movingCardIds
           );
 
@@ -392,8 +398,56 @@ export function CardCanvasItem({
 
           if (assignedCard !== undefined) {
             cardPropRef.current =
-              finalCards.find((c) => c.id === cardId) ?? assignedCard;
+              finalCards.find((candidate) => candidate.id === cardId) ?? assignedCard;
           }
+
+          return finalCards;
+        };
+
+        if (draggedCard !== undefined && pointerPointRef.current !== undefined) {
+          const parentCard = cardsRef.current.find(
+            (candidate) => candidate.id === draggedCard.parent
+          );
+          const isManagedChild =
+            draggedCard.parent !== undefined &&
+            parentCard !== undefined &&
+            getMindMapLayoutMode(parentCard) === 'mind-map-horizontal';
+          const candidateId = findParentCandidateId(
+            cardsRef.current,
+            cardId,
+            pointerPointRef.current,
+            movingCardIds
+          );
+
+          let finalCards: CardCanvasCard[];
+          if (!isManagedChild || candidateId !== undefined) {
+            finalCards = assignParentAtPointer();
+          } else {
+            const startPosition = dragPositionSnapshot.get(cardId);
+            const dragDistance =
+              startPosition === undefined
+                ? MIND_MAP_DETACH_THRESHOLD
+                : Math.hypot(
+                    draggedCard.x - startPosition.x,
+                    draggedCard.y - startPosition.y
+                  );
+
+            finalCards =
+              dragDistance < MIND_MAP_DETACH_THRESHOLD
+                ? normalizeMindMapLayout(cardsRef.current)
+                : normalizeMindMapLayout(
+                    cardsRef.current.map((currentCard) => {
+                      if (currentCard.id !== cardId) return currentCard;
+
+                      const detachedCard = { ...currentCard };
+                      delete detachedCard.parent;
+                      return detachedCard;
+                    })
+                  );
+          }
+
+          cardPropRef.current =
+            finalCards.find((candidate) => candidate.id === cardId) ?? draggedCard;
           cardsRef.current = finalCards;
           onCardsChangeRef.current(finalCards);
         }
