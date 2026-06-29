@@ -4,11 +4,15 @@ import {
   cardLocatorSelector,
   dragCardCenterToPoint,
   dragLocatorBy,
+  enableOption,
   expectCardMovedBy,
+  expectCardPositionUnchanged,
   expectNoParent,
   getCardData,
   getCardDataById,
   getRequiredBox,
+  linkDragHeaderToCard,
+  linkedIds,
   type CardDataSnapshot,
   waitForAnimationFrame,
 } from './helpers';
@@ -17,6 +21,8 @@ import {
   MIND_MAP_VERTICAL_GAP,
 } from '../../src/utils/card-layout';
 import type { CardChildrenLayoutMode } from '../../src';
+
+const LINK_MODE_SELECTOR = '[data-card-link-mode-toggle]';
 
 type DemoCardInput = {
   readonly id: string;
@@ -752,5 +758,98 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(childAfter.y).toBeCloseTo(childBefore.y, 5);
     expect(grandchildAfter.x).toBeCloseTo(grandchildBefore.x, 5);
     expect(grandchildAfter.y).toBeCloseTo(grandchildBefore.y, 5);
+  });
+
+  test('keeps mind-map parentage and layout unchanged during link-mode drags', async ({
+    page,
+  }) => {
+    // Given: a mind-map parent owns a managed child and link mode is enabled.
+    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const child = Object.freeze({ ...childCard, id: 'link-mode-managed-child', height: 90 });
+    await loadFrozenCards(page, [parent, child]);
+    await waitForAnimationFrame(page);
+    await enableOption(page, LINK_MODE_SELECTOR);
+    const beforeCards = await getCardData(page);
+    const parentBefore = getCardDataById(beforeCards, parent.id);
+    const childBefore = getCardDataById(beforeCards, child.id);
+
+    // When: the managed child is link-dragged onto its parent.
+    await linkDragHeaderToCard(page, child.id, parent.id);
+    await waitForAnimationFrame(page);
+
+    // Then: only linkedCardIds changes; hierarchy and normalized coordinates stay stable.
+    const afterCards = await getCardData(page);
+    const parentAfter = getCardDataById(afterCards, parent.id);
+    const childAfter = getCardDataById(afterCards, child.id);
+    expect(linkedIds(parentAfter)).toEqual([child.id]);
+    expect(linkedIds(childAfter)).toEqual([parent.id]);
+    expect(childAfter.parent).toBe(parent.id);
+    expectCardPositionUnchanged(parentBefore, parentAfter);
+    expectCardPositionUnchanged(childBefore, childAfter);
+    expect(childAfter.x).toBeCloseTo(expectedChildX(parentAfter), 5);
+    expect(childAfter.y).toBeCloseTo(expectedChildY(parentAfter, [child], 0), 5);
+  });
+
+  test('does not render hierarchy connectors for mind-map parent-child data', async ({
+    page,
+  }) => {
+    // Given: a mind-map parent has two children but no linkedCardIds graph.
+    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const first = Object.freeze({ ...childCard, id: 'connector-first-child', height: 80 });
+    const second = Object.freeze({ ...childCard, id: 'connector-second-child', height: 100 });
+    await loadFrozenCards(page, [parent, first, second]);
+    await waitForAnimationFrame(page);
+
+    // Then: link connectors are absent and no parent-child connector selector exists.
+    await expect(page.locator('[data-card-link-connector]')).toHaveCount(0);
+    await expect(page.locator('[data-parent-child-connector]')).toHaveCount(0);
+  });
+
+  test('preserves free-mode attach expansion and empty-canvas detach semantics', async ({
+    page,
+  }) => {
+    // Given: a free parent and a free child start without mind-map mode.
+    const parent = Object.freeze({ ...parentCard, id: 'free-regression-parent' });
+    const child = Object.freeze({
+      ...childCard,
+      id: 'free-regression-child',
+      parent: undefined,
+      x: 560,
+      y: 340,
+      width: 180,
+      height: 140,
+    });
+    await loadFrozenCards(page, [parent, child]);
+    const parentBefore = getCardDataById(await getCardData(page), parent.id);
+    const childLocator = page.locator(cardLocatorSelector(child.id));
+    await childLocator.locator('.cards-card-canvas__card-header').scrollIntoViewIfNeeded();
+    const parentBox = await getRequiredBox(page.locator(cardLocatorSelector(parent.id)));
+
+    // When: the child attaches inside the free parent's bottom-right interior.
+    await dragCardCenterToPoint(
+      page,
+      { card: childLocator, handle: childLocator.locator('.cards-card-canvas__card-header') },
+      { x: parentBox.x + parentBox.width - 4, y: parentBox.y + parentBox.height - 4 }
+    );
+    const attachedCards = await getCardData(page);
+    const parentAfterAttach = getCardDataById(attachedCards, parent.id);
+    const childAfterAttach = getCardDataById(attachedCards, child.id);
+
+    // Then: legacy free-mode containment expansion still occurs.
+    expect(childAfterAttach.parent).toBe(parent.id);
+    expect(parentAfterAttach.width).toBeGreaterThan(parentBefore.width);
+    expect(parentAfterAttach.height).toBeGreaterThan(parentBefore.height);
+
+    // When: the attached child is dragged onto empty canvas.
+    const stageBox = await getRequiredBox(page.locator('.card-canvas-demo-stage'));
+    await dragCardCenterToPoint(
+      page,
+      { card: childLocator, handle: childLocator.locator('.cards-card-canvas__card-header') },
+      { x: stageBox.x + stageBox.width - 20, y: stageBox.y + stageBox.height - 20 }
+    );
+
+    // Then: free-mode empty drop removes the parent assignment.
+    const detachedCards = await getCardData(page);
+    expectNoParent(getCardDataById(detachedCards, child.id));
   });
 });
