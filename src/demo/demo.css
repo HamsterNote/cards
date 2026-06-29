@@ -129,7 +129,7 @@ body {
 
 .card-canvas-demo-layout {
   flex-wrap: nowrap;
-  align-items: stretch;
+  align-items: flex-start;
 }
 
 .card-canvas-demo-settings {
@@ -140,6 +140,7 @@ body {
 
 .card-canvas-demo-stage {
   flex: 1;
+  height: 400px;
   min-height: 400px;
   position: relative;
   overflow: hidden;
@@ -156,6 +157,14 @@ body {
 /* Demo 中给 CardCanvas wrapper 添加偏移，展示 className 透传能力 */
 .card-canvas-demo-transform {
   transform: translate(50%, 50%);
+}
+
+.card-canvas-demo-popover-content {
+  pointer-events: none;
+}
+
+.card-canvas-demo-popover-content input {
+  pointer-events: auto;
 }
 
 .demo__data-display {

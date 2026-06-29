@@ -12,6 +12,28 @@
   position: relative;
 }
 
+.cards-card-canvas__connectors {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.cards-card-canvas__connectors line {
+  stroke: #d1d5db; /* light-gray / gray-300 */
+  stroke-width: 2;
+  stroke-dasharray: 4 4;
+}
+
+.cards-card-canvas__popover {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .cards-card-canvas__card {
   position: absolute;
   background-color: #ffffff;
@@ -47,6 +69,75 @@
     0 10px 15px -3px rgba(0, 0, 0, 0.1),
     0 4px 6px -4px rgba(0, 0, 0, 0.1),
     0 0 0 4px rgba(16, 185, 129, 0.15);
+}
+
+/*
+ * 连线拖拽样式
+ * --- 源头卡片高亮 ---
+ * 使用靛蓝色（indigo-500）与蓝色的 --selected 区分
+ * transform: none !important 阻止 Drag 框架在拖拽时视觉移动卡片
+ */
+.cards-card-canvas__card--link-source {
+  outline: 2px solid rgba(99, 102, 241, 0.7);
+  outline-offset: 2px;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0 0 0 4px rgba(99, 102, 241, 0.15);
+  transform: none !important;
+}
+
+/* --- 目标卡片高亮 --- 使用蓝色（blue-600）与圆圈边框呼应 */
+.cards-card-canvas__card--link-target {
+  outline: 2px solid rgba(37, 99, 235, 0.8);
+  outline-offset: 2px;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+
+/* --- 连线拖拽 SVG 覆盖层 --- */
+.cards-card-canvas__link-drag-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* 默认虚线状态（灰色） */
+.cards-card-canvas__link-drag-line {
+  stroke: #9ca3af;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+/* 悬停到有效目标时高亮（蓝色） */
+.cards-card-canvas__link-drag-line--active {
+  stroke: #2563eb;
+  stroke-width: 2.5;
+}
+
+/* --- 圆圈指示器 --- 跟随光标，40px 直径 */
+.cards-card-canvas__link-drag-circle {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #2563eb;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000000;
+  pointer-events: none;
+  z-index: 10000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: none;
 }
 
 .cards-card-canvas__card-header {
@@ -97,4 +188,33 @@
 
 .cards-card-canvas__resize-handle--hidden {
   display: none;
+}
+
+.cards-card-canvas__link-button {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: #2563eb; /* blue-600 */
+  text-decoration: underline;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/*
+ * Links footer — 作为卡片 flex 容器的独立子元素（与 card-content 同级）。
+ * flex-shrink: 0 保证 Links 始终完整展示，即使 content 区域空间不足也不会被压缩。
+ * 空间不足时由 card-content（flex:1 + overflow:auto）承担滚动，footer 始终可见。
+ */
+.cards-card-canvas__card-footer {
+  flex-shrink: 0;          /* 关键：不被压缩，Links 始终完整展示 */
+  padding: 12px;           /* 自带 padding，不再依赖 content 的 padding */
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }

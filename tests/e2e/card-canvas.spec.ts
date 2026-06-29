@@ -30,6 +30,14 @@ type HierarchyCardIds = {
   readonly grandchildId: string;
 };
 
+function expectNotNull<T>(value: T | null): T {
+  expect(value).not.toBeNull();
+  if (value === null) {
+    throw new Error('Expected value to be non-null');
+  }
+  return value;
+}
+
 async function addCard(
   page: Page,
   title = 'Test Card',
@@ -66,12 +74,7 @@ function getCardParts(page: Page) {
 }
 
 async function getRequiredBox(locator: Locator) {
-  const box = await locator.boundingBox();
-  expect(box).not.toBeNull();
-  if (box === null) {
-    throw new Error('Expected locator to have a bounding box');
-  }
-  return box;
+  return expectNotNull(await locator.boundingBox());
 }
 
 async function dragLocatorBy(
@@ -244,10 +247,34 @@ async function dragCardCenterToPoint(
   await page.mouse.up();
 }
 
+/**
+ * Drag a card by its handle/header so the pointer ends at an absolute viewport
+ * point, leaving the mouse button held down. Use this when you need to assert
+ * state *during* a drag before releasing.
+ */
+async function dragHandleToPoint(page: Page, handle: Locator, target: DragPoint) {
+  await handle.scrollIntoViewIfNeeded();
+  const handleBox = await getRequiredBox(handle);
+  const handleCenter = {
+    x: handleBox.x + handleBox.width / 2,
+    y: handleBox.y + handleBox.height / 2,
+  };
+
+  await page.mouse.move(handleCenter.x, handleCenter.y);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 20 });
+}
+
 async function enableOption(page: Page, selector: string) {
   const option = page.locator(selector);
   await expect(option).toBeVisible();
   await option.check();
+}
+
+async function disableOption(page: Page, selector: string) {
+  const option = page.locator(selector);
+  await expect(option).toBeVisible();
+  await option.uncheck();
 }
 
 async function clearSelectionFromCanvas(page: Page) {
@@ -280,18 +307,18 @@ test.describe('Demo layout', () => {
     const settingsBox = await settings.boundingBox();
     const stageBox = await stage.boundingBox();
 
-    expect(demoBox).not.toBeNull();
-    expect(settingsBox).not.toBeNull();
-    expect(stageBox).not.toBeNull();
+    const requiredDemoBox = expectNotNull(demoBox);
+    const requiredSettingsBox = expectNotNull(settingsBox);
+    const requiredStageBox = expectNotNull(stageBox);
 
     // Sidebar must stay exactly 240px wide.
-    expect(settingsBox!.width).toBe(240);
+    expect(requiredSettingsBox.width).toBe(240);
 
     // The demo container should span nearly the full viewport width (minus padding).
-    expect(demoBox!.width).toBeGreaterThan(1000);
+    expect(requiredDemoBox.width).toBeGreaterThan(1000);
 
     // The stage must fill the remaining horizontal space (tolerant of section padding/gap).
-    expect(stageBox!.width).toBeGreaterThan(800);
+    expect(requiredStageBox.width).toBeGreaterThan(800);
   });
 
   test('removes the Button showcase while preserving Add Card', async ({
@@ -305,12 +332,114 @@ test.describe('Demo layout', () => {
   });
 });
 
+test.describe('CardCanvas select-on-add toggle', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  test('toggle defaults to checked and newly added cards are selected and centered', async ({
+    page,
+  }) => {
+    const toggle = page.locator('[data-card-select-new-card-toggle]');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toBeChecked();
+
+    await addCard(page, 'Card A', 'Content A');
+
+    const card = page.locator('[data-card-id="card-1"]');
+    await expect(card).toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(
+      page.locator('.cards-card-canvas__card--selected')
+    ).toHaveCount(1);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
+    await expect(page.locator('[data-testid="delete-selected-card"]')).toBeEnabled();
+
+    const cardData = await getCardData(page);
+    const firstCard = getCardDataById(cardData, 'card-1');
+    expect(firstCard.x).toBe(-90);
+    expect(firstCard.y).toBe(-60);
+    expect(firstCard.width).toBe(180);
+    expect(firstCard.height).toBe(120);
+
+    await expect(card).toHaveCSS('left', '-90px');
+    await expect(card).toHaveCSS('top', '-60px');
+
+    await addCard(page, 'Card B', 'Content B');
+
+    const secondCard = page.locator('[data-card-id="card-2"]');
+    await expect(secondCard).toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(card).not.toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(
+      page.locator('.cards-card-canvas__card--selected')
+    ).toHaveCount(1);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-2'
+    );
+
+    const cardsAfterSecondAdd = await getCardData(page);
+    const secondCardData = getCardDataById(cardsAfterSecondAdd, 'card-2');
+    expect(secondCardData.x).toBe(-90);
+    expect(secondCardData.y).toBe(-60);
+  });
+
+  test('does not select newly added cards when the toggle is unchecked', async ({
+    page,
+  }) => {
+    await disableOption(page, '[data-card-select-new-card-toggle]');
+
+    await addCard(page, 'Card A', 'Content A');
+
+    const firstCard = page.locator('[data-card-id="card-1"]');
+    await expect(firstCard).not.toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(
+      page.locator('.cards-card-canvas__card--selected')
+    ).toHaveCount(0);
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+
+    await firstCard.locator('.cards-card-canvas__card-content').click();
+    await expect(firstCard).toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
+
+    await addCard(page, 'Card B', 'Content B');
+
+    await expect(firstCard).toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(
+      page.locator('[data-card-id="card-2"]')
+    ).not.toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
+  });
+
+  test('does not create cards or change selection when title or content is empty', async ({
+    page,
+  }) => {
+    await page.locator('[data-card-title-input]').fill('');
+    await page.locator('[data-card-content-input]').fill('');
+    await page.getByRole('button', { name: 'Add Card' }).click();
+
+    await expect(page.locator('[data-card-id]')).toHaveCount(0);
+    await expect(page.locator('[data-card-data-content]')).toHaveText('[]');
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+
+    await page.locator('[data-card-title-input]').fill('Only Title');
+    await page.getByRole('button', { name: 'Add Card' }).click();
+
+    await expect(page.locator('[data-card-id]')).toHaveCount(0);
+  });
+});
+
 test.describe('CardCanvas selection', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
   });
 
   test('has no selected cards by default', async ({ page }) => {
+    await disableOption(page, '[data-card-select-new-card-toggle]');
     await addCard(page, 'Card A', 'Content A');
     await addCard(page, 'Card B', 'Content B');
 
@@ -355,7 +484,7 @@ test.describe('CardCanvas selection', () => {
     );
 
     const contentBoxBefore = await secondCardContent.boundingBox();
-    expect(contentBoxBefore).not.toBeNull();
+    const requiredContentBoxBefore = expectNotNull(contentBoxBefore);
 
     await secondCardContent.click();
 
@@ -385,9 +514,9 @@ test.describe('CardCanvas selection', () => {
     expect(selectedStyle.outlineWidth).not.toBe('0px');
 
     const contentBoxAfter = await secondCardContent.boundingBox();
-    expect(contentBoxAfter).not.toBeNull();
-    expect(contentBoxAfter!.width).toBeCloseTo(contentBoxBefore!.width, 0.5);
-    expect(contentBoxAfter!.height).toBeCloseTo(contentBoxBefore!.height, 0.5);
+    const requiredContentBoxAfter = expectNotNull(contentBoxAfter);
+    expect(requiredContentBoxAfter.width).toBeCloseTo(requiredContentBoxBefore.width, 0.5);
+    expect(requiredContentBoxAfter.height).toBeCloseTo(requiredContentBoxBefore.height, 0.5);
   });
 
   test('does not clear selection when clicking the settings panel', async ({
@@ -429,9 +558,9 @@ test.describe('CardCanvas selection', () => {
 
     const stage = page.locator('.card-canvas-demo-stage');
     const stageBox = await stage.boundingBox();
-    expect(stageBox).not.toBeNull();
+    const requiredStageBox = expectNotNull(stageBox);
 
-    await page.mouse.click(stageBox!.x + 20, stageBox!.y + 20);
+    await page.mouse.click(requiredStageBox.x + 20, requiredStageBox.y + 20);
 
     await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
     await expect(
@@ -517,6 +646,7 @@ test.describe('CardCanvas custom rendering and options', () => {
   test('hides resize handles on unselected cards when selection is required', async ({
     page,
   }) => {
+    await disableOption(page, '[data-card-select-new-card-toggle]');
     await addCard(page, 'Card A', 'Content A');
     await enableOption(page, '[data-card-require-selection-toggle]');
 
@@ -536,6 +666,7 @@ test.describe('CardCanvas custom rendering and options', () => {
   test('requires selection before moving or resizing when the option is enabled', async ({
     page,
   }) => {
+    await disableOption(page, '[data-card-select-new-card-toggle]');
     await addCard(page, 'Card A', 'Content A');
     await enableOption(page, '[data-card-require-selection-toggle]');
 
@@ -578,6 +709,7 @@ test.describe('CardCanvas custom rendering and options', () => {
   test('does not select an unselected card after drag-like content pointer movement when selection is required', async ({
     page,
   }) => {
+    await disableOption(page, '[data-card-select-new-card-toggle]');
     await addCard(page, 'Card A', 'Content A');
     await enableOption(page, '[data-card-require-selection-toggle]');
 
@@ -626,6 +758,7 @@ test.describe('CardCanvas custom rendering and options', () => {
   test('does not select a card when resizing ends and selectOnMoveEnd is enabled', async ({
     page,
   }) => {
+    await disableOption(page, '[data-card-select-new-card-toggle]');
     await addCard(page, 'Card A', 'Content A');
     await enableOption(page, '[data-card-select-on-move-end-toggle]');
 
@@ -674,36 +807,33 @@ test.describe('CardCanvas interactions', () => {
   }) => {
     const { card, handle } = getCardParts(page);
 
-    const cardBoxBefore = await card.boundingBox();
-    const handleBox = await handle.boundingBox();
-    expect(cardBoxBefore).not.toBeNull();
-    expect(handleBox).not.toBeNull();
+    const cardBoxBefore = expectNotNull(await card.boundingBox());
+    const handleBox = expectNotNull(await handle.boundingBox());
 
     // Drag the resize handle 80px right and 40px down.
     await page.mouse.move(
-      handleBox!.x + handleBox!.width / 2,
-      handleBox!.y + handleBox!.height / 2
+      handleBox.x + handleBox.width / 2,
+      handleBox.y + handleBox.height / 2
     );
     await page.mouse.down();
     await page.mouse.move(
-      handleBox!.x + handleBox!.width / 2 + 80,
-      handleBox!.y + handleBox!.height / 2 + 40,
+      handleBox.x + handleBox.width / 2 + 80,
+      handleBox.y + handleBox.height / 2 + 40,
       {
         steps: 10,
       }
     );
     await page.mouse.up();
 
-    const cardBoxAfter = await card.boundingBox();
-    expect(cardBoxAfter).not.toBeNull();
+    const cardBoxAfter = expectNotNull(await card.boundingBox());
 
     // Size should increase by roughly the drag delta.
-    expect(cardBoxAfter!.width).toBeCloseTo(cardBoxBefore!.width + 80, -1);
-    expect(cardBoxAfter!.height).toBeCloseTo(cardBoxBefore!.height + 40, -1);
+    expect(cardBoxAfter.width).toBeCloseTo(cardBoxBefore.width + 80, -1);
+    expect(cardBoxAfter.height).toBeCloseTo(cardBoxBefore.height + 40, -1);
 
     // Position should remain unchanged.
-    expect(cardBoxAfter!.x).toBeCloseTo(cardBoxBefore!.x, -1);
-    expect(cardBoxAfter!.y).toBeCloseTo(cardBoxBefore!.y, -1);
+    expect(cardBoxAfter.x).toBeCloseTo(cardBoxBefore.x, -1);
+    expect(cardBoxAfter.y).toBeCloseTo(cardBoxBefore.y, -1);
   });
 
   test('moves the card from the header without changing size', async ({
@@ -711,36 +841,33 @@ test.describe('CardCanvas interactions', () => {
   }) => {
     const { card, header } = getCardParts(page);
 
-    const cardBoxBefore = await card.boundingBox();
-    const headerBox = await header.boundingBox();
-    expect(cardBoxBefore).not.toBeNull();
-    expect(headerBox).not.toBeNull();
+    const cardBoxBefore = expectNotNull(await card.boundingBox());
+    const headerBox = expectNotNull(await header.boundingBox());
 
     // Drag the card header 80px right and 40px down.
     await page.mouse.move(
-      headerBox!.x + headerBox!.width / 2,
-      headerBox!.y + headerBox!.height / 2
+      headerBox.x + headerBox.width / 2,
+      headerBox.y + headerBox.height / 2
     );
     await page.mouse.down();
     await page.mouse.move(
-      headerBox!.x + headerBox!.width / 2 + 80,
-      headerBox!.y + headerBox!.height / 2 + 40,
+      headerBox.x + headerBox.width / 2 + 80,
+      headerBox.y + headerBox.height / 2 + 40,
       {
         steps: 10,
       }
     );
     await page.mouse.up();
 
-    const cardBoxAfter = await card.boundingBox();
-    expect(cardBoxAfter).not.toBeNull();
+    const cardBoxAfter = expectNotNull(await card.boundingBox());
 
     // Position should shift by roughly the drag delta.
-    expect(cardBoxAfter!.x).toBeCloseTo(cardBoxBefore!.x + 80, -1);
-    expect(cardBoxAfter!.y).toBeCloseTo(cardBoxBefore!.y + 40, -1);
+    expect(cardBoxAfter.x).toBeCloseTo(cardBoxBefore.x + 80, -1);
+    expect(cardBoxAfter.y).toBeCloseTo(cardBoxBefore.y + 40, -1);
 
     // Size should remain unchanged.
-    expect(cardBoxAfter!.width).toBeCloseTo(cardBoxBefore!.width, -1);
-    expect(cardBoxAfter!.height).toBeCloseTo(cardBoxBefore!.height, -1);
+    expect(cardBoxAfter.width).toBeCloseTo(cardBoxBefore.width, -1);
+    expect(cardBoxAfter.height).toBeCloseTo(cardBoxBefore.height, -1);
   });
 
   test('parent moves descendants by the same drag delta', async ({ page }) => {
@@ -1012,31 +1139,29 @@ test.describe('CardCanvas interactions', () => {
   test('clamps resize to the minimum card size', async ({ page }) => {
     const { card, handle } = getCardParts(page);
 
-    const handleBox = await handle.boundingBox();
-    expect(handleBox).not.toBeNull();
+    const handleBox = expectNotNull(await handle.boundingBox());
 
     // Drag the resize handle far up-left to try to shrink below the minimum.
     await page.mouse.move(
-      handleBox!.x + handleBox!.width / 2,
-      handleBox!.y + handleBox!.height / 2
+      handleBox.x + handleBox.width / 2,
+      handleBox.y + handleBox.height / 2
     );
     await page.mouse.down();
     await page.mouse.move(
-      handleBox!.x + handleBox!.width / 2 - 500,
-      handleBox!.y + handleBox!.height / 2 - 500,
+      handleBox.x + handleBox.width / 2 - 500,
+      handleBox.y + handleBox.height / 2 - 500,
       {
         steps: 10,
       }
     );
     await page.mouse.up();
 
-    const cardBoxAfter = await card.boundingBox();
-    expect(cardBoxAfter).not.toBeNull();
+    const cardBoxAfter = expectNotNull(await card.boundingBox());
 
-    expect(cardBoxAfter!.width).toBeGreaterThanOrEqual(79);
-    expect(cardBoxAfter!.width).toBeLessThanOrEqual(85);
-    expect(cardBoxAfter!.height).toBeGreaterThanOrEqual(79);
-    expect(cardBoxAfter!.height).toBeLessThanOrEqual(85);
+    expect(cardBoxAfter.width).toBeGreaterThanOrEqual(79);
+    expect(cardBoxAfter.width).toBeLessThanOrEqual(85);
+    expect(cardBoxAfter.height).toBeGreaterThanOrEqual(79);
+    expect(cardBoxAfter.height).toBeLessThanOrEqual(85);
   });
 
   test('does not lock card drag after a non-primary button press on the resize handle', async ({
@@ -1044,40 +1169,146 @@ test.describe('CardCanvas interactions', () => {
   }) => {
     const { card, handle } = getCardParts(page);
 
-    const handleBox = await handle.boundingBox();
-    expect(handleBox).not.toBeNull();
+    const handleBox = expectNotNull(await handle.boundingBox());
 
     // Right-click on the resize handle and release.
     await page.mouse.move(
-      handleBox!.x + handleBox!.width / 2,
-      handleBox!.y + handleBox!.height / 2
+      handleBox.x + handleBox.width / 2,
+      handleBox.y + handleBox.height / 2
     );
     await page.mouse.down({ button: 'right' });
     await page.mouse.up({ button: 'right' });
 
     // Card drag from the header should still work afterwards.
-    const cardBoxBefore = await card.boundingBox();
+    const cardBoxBefore = expectNotNull(await card.boundingBox());
     const header = page.locator('.cards-card-canvas__card-header').first();
-    const headerBox = await header.boundingBox();
-    expect(cardBoxBefore).not.toBeNull();
-    expect(headerBox).not.toBeNull();
+    const headerBox = expectNotNull(await header.boundingBox());
 
     await page.mouse.move(
-      headerBox!.x + headerBox!.width / 2,
-      headerBox!.y + headerBox!.height / 2
+      headerBox.x + headerBox.width / 2,
+      headerBox.y + headerBox.height / 2
     );
     await page.mouse.down();
     await page.mouse.move(
-      headerBox!.x + headerBox!.width / 2 + 60,
-      headerBox!.y + headerBox!.height / 2 + 40,
+      headerBox.x + headerBox.width / 2 + 60,
+      headerBox.y + headerBox.height / 2 + 40,
       { steps: 10 }
     );
     await page.mouse.up();
 
-    const cardBoxAfter = await card.boundingBox();
-    expect(cardBoxAfter).not.toBeNull();
-    expect(cardBoxAfter!.x).toBeCloseTo(cardBoxBefore!.x + 60, -1);
-    expect(cardBoxAfter!.y).toBeCloseTo(cardBoxBefore!.y + 40, -1);
+    const cardBoxAfter = expectNotNull(await card.boundingBox());
+    expect(cardBoxAfter.x).toBeCloseTo(cardBoxBefore.x + 60, -1);
+    expect(cardBoxAfter.y).toBeCloseTo(cardBoxBefore.y + 40, -1);
+  });
+});
+
+test.describe('CardCanvas pointer-based parent grouping', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  test('marks parent candidate during drag when pointer is inside parent but card center is outside', async ({
+    page,
+  }) => {
+    await addCard(page, 'Parent', 'Content');
+    const card1 = page.locator('[data-card-id="card-1"]');
+    const header1 = card1.locator('.cards-card-canvas__card-header');
+    await dragLocatorBy(page, header1, { x: 300, y: 300 });
+    const box1 = await getRequiredBox(card1);
+
+    await addCard(page, 'Child', 'Content');
+    const card2 = page.locator('[data-card-id="card-2"]');
+    const header2 = card2.locator('.cards-card-canvas__card-header');
+
+    // Pointer near the bottom of card-1: inside the parent.
+    // The dragged card sits mostly below card-1, so its center is outside.
+    const pointerTarget = {
+      x: box1.x + box1.width / 2,
+      y: box1.y + box1.height - 20,
+    };
+    await dragHandleToPoint(page, header2, pointerTarget);
+
+    await expect(card1).toHaveAttribute('data-parent-candidate', 'true');
+    await expect(card1).toHaveClass(/cards-card-canvas__card--parent-candidate/);
+
+    await page.mouse.up();
+  });
+
+  test('does not mark parent candidate during drag when card center is inside parent but pointer is outside', async ({
+    page,
+  }) => {
+    await addCard(page, 'Parent', 'Content');
+    const card1 = page.locator('[data-card-id="card-1"]');
+    const header1 = card1.locator('.cards-card-canvas__card-header');
+    await dragLocatorBy(page, header1, { x: 300, y: 300 });
+    const box1 = await getRequiredBox(card1);
+
+    await addCard(page, 'Child', 'Content');
+    const card2 = page.locator('[data-card-id="card-2"]');
+    const header2 = card2.locator('.cards-card-canvas__card-header');
+
+    // Pointer above card-1: outside the parent.
+    // The dragged card extends downward so its center is still inside card-1.
+    const pointerTarget = {
+      x: box1.x + box1.width / 2,
+      y: box1.y - 20,
+    };
+    await dragHandleToPoint(page, header2, pointerTarget);
+
+    await expect(card1).not.toHaveAttribute('data-parent-candidate');
+    await expect(card1).not.toHaveClass(/cards-card-canvas__card--parent-candidate/);
+
+    await page.mouse.up();
+  });
+
+  test('assigns parent on release when pointer is inside parent but card center is outside', async ({
+    page,
+  }) => {
+    await addCard(page, 'Parent', 'Content');
+    const card1 = page.locator('[data-card-id="card-1"]');
+    const header1 = card1.locator('.cards-card-canvas__card-header');
+    await dragLocatorBy(page, header1, { x: 300, y: 300 });
+    const box1 = await getRequiredBox(card1);
+
+    await addCard(page, 'Child', 'Content');
+    const card2 = page.locator('[data-card-id="card-2"]');
+    const header2 = card2.locator('.cards-card-canvas__card-header');
+
+    const pointerTarget = {
+      x: box1.x + box1.width / 2,
+      y: box1.y + box1.height - 20,
+    };
+    await dragHandleToPoint(page, header2, pointerTarget);
+    await page.mouse.up();
+
+    const cards = await getCardData(page);
+    const child = getCardDataById(cards, 'card-2');
+    expect(child.parent).toBe('card-1');
+  });
+
+  test('does not assign parent on release when card center is inside parent but pointer is outside', async ({
+    page,
+  }) => {
+    await addCard(page, 'Parent', 'Content');
+    const card1 = page.locator('[data-card-id="card-1"]');
+    const header1 = card1.locator('.cards-card-canvas__card-header');
+    await dragLocatorBy(page, header1, { x: 300, y: 300 });
+    const box1 = await getRequiredBox(card1);
+
+    await addCard(page, 'Child', 'Content');
+    const card2 = page.locator('[data-card-id="card-2"]');
+    const header2 = card2.locator('.cards-card-canvas__card-header');
+
+    const pointerTarget = {
+      x: box1.x + box1.width / 2,
+      y: box1.y - 20,
+    };
+    await dragHandleToPoint(page, header2, pointerTarget);
+    await page.mouse.up();
+
+    const cards = await getCardData(page);
+    const child = getCardDataById(cards, 'card-2');
+    expectNoParent(child);
   });
 });
 
@@ -1299,6 +1530,7 @@ test.describe('CardCanvas Delete Selected', () => {
     await cardA.locator('.cards-card-canvas__card-content').dispatchEvent('click');
     await expect(cardA).toHaveClass(/cards-card-canvas__card--selected/);
 
+    await disableOption(page, '[data-card-select-new-card-toggle]');
     await addCard(page, 'Card C', 'Content C');
     const cardC = page.locator('[data-card-id="card-3"]');
     await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
