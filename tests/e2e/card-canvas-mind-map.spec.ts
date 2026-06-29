@@ -136,6 +136,18 @@ async function deleteSelectedCard(page: Page): Promise<void> {
   await page.getByTestId('delete-selected-card').click();
 }
 
+async function resizeCardBy(
+  page: Page,
+  cardId: string,
+  delta: { readonly x: number; readonly y: number }
+): Promise<void> {
+  await dragLocatorBy(
+    page,
+    page.locator(`${cardLocatorSelector(cardId)} [data-card-resize-handle]`),
+    delta
+  );
+}
+
 test.describe('CardCanvas mind-map data contract', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -626,5 +638,119 @@ test.describe('CardCanvas mind-map data contract', () => {
         delta
       );
     }
+  });
+
+  test('reflows direct child x positions when a mind-map parent width grows', async ({
+    page,
+  }) => {
+    // Given: a mind-map parent has two direct children in canonical positions.
+    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const first = Object.freeze({ ...childCard, id: 'resize-width-first', height: 80 });
+    const second = Object.freeze({ ...childCard, id: 'resize-width-second', height: 100 });
+    await loadFrozenCards(page, [parent, first, second]);
+    await waitForAnimationFrame(page);
+    const beforeCards = await getCardData(page);
+    const firstBefore = getCardDataById(beforeCards, first.id);
+    const secondBefore = getCardDataById(beforeCards, second.id);
+
+    // When: the parent width increases by 40px.
+    const delta = { x: 40, y: 0 };
+    await resizeCardBy(page, parent.id, delta);
+    await waitForAnimationFrame(page);
+
+    // Then: each direct child's x position increases by exactly the same width delta.
+    const afterCards = await getCardData(page);
+    const parentAfter = getCardDataById(afterCards, parent.id);
+    const firstAfter = getCardDataById(afterCards, first.id);
+    const secondAfter = getCardDataById(afterCards, second.id);
+    expect(parentAfter.width).toBeCloseTo(parent.width + delta.x, 5);
+    expect(firstAfter.x).toBeCloseTo(firstBefore.x + delta.x, 5);
+    expect(secondAfter.x).toBeCloseTo(secondBefore.x + delta.x, 5);
+  });
+
+  test('re-centers the child block when a mind-map parent height grows', async ({
+    page,
+  }) => {
+    // Given: a mind-map parent has a vertically centered child block.
+    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const first = Object.freeze({ ...childCard, id: 'resize-height-first', height: 80 });
+    const second = Object.freeze({ ...childCard, id: 'resize-height-second', height: 100 });
+    await loadFrozenCards(page, [parent, first, second]);
+    await waitForAnimationFrame(page);
+
+    // When: the parent height increases by 40px.
+    await resizeCardBy(page, parent.id, { x: 0, y: 40 });
+    await waitForAnimationFrame(page);
+
+    // Then: the child block is centered around the resized parent height.
+    const cards = await getCardData(page);
+    const parentAfter = getCardDataById(cards, parent.id);
+    const firstAfter = getCardDataById(cards, first.id);
+    const secondAfter = getCardDataById(cards, second.id);
+    expect(parentAfter.height).toBeCloseTo(parent.height + 40, 5);
+    expect(firstAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second], 0), 5);
+    expect(secondAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second], 1), 5);
+  });
+
+  test('reflows following siblings when a direct mind-map child height grows', async ({
+    page,
+  }) => {
+    // Given: a mind-map parent owns two direct children.
+    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const first = Object.freeze({ ...childCard, id: 'resize-child-first', height: 80 });
+    const second = Object.freeze({ ...childCard, id: 'resize-child-second', height: 100 });
+    await loadFrozenCards(page, [parent, first, second]);
+    await waitForAnimationFrame(page);
+    const beforeSecond = getCardDataById(await getCardData(page), second.id);
+
+    // When: the first child's height increases by 40px.
+    const delta = { x: 0, y: 40 };
+    await resizeCardBy(page, first.id, delta);
+    await waitForAnimationFrame(page);
+
+    // Then: sibling slots are recomputed from the resized child height.
+    const cards = await getCardData(page);
+    const parentAfter = getCardDataById(cards, parent.id);
+    const firstAfter = getCardDataById(cards, first.id);
+    const secondAfter = getCardDataById(cards, second.id);
+    const resizedFirst = { ...first, height: first.height + delta.y };
+    expect(firstAfter.height).toBeCloseTo(resizedFirst.height, 5);
+    expect(secondAfter.y).not.toBeCloseTo(beforeSecond.y, 5);
+    expect(firstAfter.y).toBeCloseTo(expectedChildY(parentAfter, [resizedFirst, second], 0), 5);
+    expect(secondAfter.y).toBeCloseTo(expectedChildY(parentAfter, [resizedFirst, second], 1), 5);
+  });
+
+  test('keeps free-mode child and grandchild positions stable when parent resizes', async ({
+    page,
+  }) => {
+    // Given: a free-mode hierarchy uses the legacy resize contract.
+    const parent = Object.freeze({ ...parentCard, id: 'free-resize-parent' });
+    const child = Object.freeze({ ...childCard, id: 'free-resize-child', parent: parent.id });
+    const grandchild = Object.freeze({
+      ...childCard,
+      id: 'free-resize-grandchild',
+      parent: child.id,
+      x: 420,
+      y: 320,
+    });
+    await loadFrozenCards(page, [parent, child, grandchild]);
+    const beforeCards = await getCardData(page);
+    const childBefore = getCardDataById(beforeCards, child.id);
+    const grandchildBefore = getCardDataById(beforeCards, grandchild.id);
+
+    // When: the free-mode parent is resized.
+    await resizeCardBy(page, parent.id, { x: 60, y: 30 });
+
+    // Then: descendants keep their exact existing positions.
+    const afterCards = await getCardData(page);
+    const parentAfter = getCardDataById(afterCards, parent.id);
+    const childAfter = getCardDataById(afterCards, child.id);
+    const grandchildAfter = getCardDataById(afterCards, grandchild.id);
+    expect(parentAfter.width).toBeCloseTo(parent.width + 60, 5);
+    expect(parentAfter.height).toBeCloseTo(parent.height + 30, 5);
+    expect(childAfter.x).toBeCloseTo(childBefore.x, 5);
+    expect(childAfter.y).toBeCloseTo(childBefore.y, 5);
+    expect(grandchildAfter.x).toBeCloseTo(grandchildBefore.x, 5);
+    expect(grandchildAfter.y).toBeCloseTo(grandchildBefore.y, 5);
   });
 });

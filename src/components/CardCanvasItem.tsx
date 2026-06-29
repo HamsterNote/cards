@@ -541,12 +541,29 @@ export function CardCanvasItem({
 
       const nextCards = cardsRef.current.map((currentCard) => {
         if (currentCard.id !== cardId) return currentCard;
-        const nextCard = { ...currentCard, width: nextWidth, height: nextHeight };
-        cardPropRef.current = nextCard;
-        return nextCard;
+        return { ...currentCard, width: nextWidth, height: nextHeight };
       });
-      cardsRef.current = nextCards;
-      onCardsChangeRef.current(nextCards);
+      const resizedCard = nextCards.find(
+        (currentCard) => currentCard.id === cardId
+      );
+      const parentCard =
+        resizedCard?.parent === undefined
+          ? undefined
+          : nextCards.find((currentCard) => currentCard.id === resizedCard.parent);
+      const shouldNormalizeMindMapLayout =
+        resizedCard !== undefined &&
+        (getMindMapLayoutMode(resizedCard) === 'mind-map-horizontal' ||
+          (parentCard !== undefined &&
+            getMindMapLayoutMode(parentCard) === 'mind-map-horizontal'));
+      const finalCards = shouldNormalizeMindMapLayout
+        ? normalizeMindMapLayout(nextCards)
+        : nextCards;
+
+      cardPropRef.current =
+        finalCards.find((currentCard) => currentCard.id === cardId) ??
+        cardPropRef.current;
+      cardsRef.current = finalCards;
+      onCardsChangeRef.current(finalCards);
     };
 
     dragHandle.addEventListener(DragOperationType.Start, handleStart);

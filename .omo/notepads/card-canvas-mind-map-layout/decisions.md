@@ -18,3 +18,5 @@
 - Re-verified outside click clears the selection even when interacting with the popover controls, using a Playwright regression test.
 - Todo 4 keeps drag-end parent assignment event-scoped in `CardCanvasItem.tsx`: only assigned mind-map parents are normalized immediately, detached cards are left as the existing assignment result, and free/missing-mode parents retain the existing content-inset expansion path.
 - Todo 4 E2E coverage lives in `tests/e2e/card-canvas-mind-map.spec.ts` with frozen fixtures for mind-map attach, free-parent attach expansion regression, and re-parenting between mind-map parents.
+- Todo 5 reuses the Todo 4 assignment branch through a local drag-end helper only when the card is not a managed mind-map child or when `findParentCandidateId` returns a candidate; managed no-candidate drops use threshold-specific snap-back/detach logic.
+- Todo 5 large managed-child detach copies the released card, deletes `parent`, and then calls `normalizeMindMapLayout` so only remaining managed sibling groups are canonicalized while the detached card keeps release `x/y`.
