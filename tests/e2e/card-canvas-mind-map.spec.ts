@@ -551,18 +551,26 @@ test.describe('CardCanvas mind-map data contract', () => {
       page.locator(`${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`),
       { x: 80, y: 0 }
     );
-    await waitForAnimationFrame(page);
-
-    // Then: the child keeps the release coordinates while the old parent's remaining child reflows.
-    const cards = await getCardData(page);
-    const movingAfter = getCardDataById(cards, movingChild.id);
-    const siblingAfter = getCardDataById(cards, sibling.id);
-    expectNoParent(movingAfter);
-    expect(movingAfter.x).toBeCloseTo(movingBefore.x + 80, 5);
-    expect(movingAfter.y).toBeCloseTo(movingBefore.y, 5);
-    expect(siblingAfter.parent).toBe(parent.id);
-    expect(siblingAfter.x).toBeCloseTo(expectedChildX(parentBefore), 5);
-    expect(siblingAfter.y).toBeCloseTo(expectedChildY(parentBefore, [sibling], 0), 5);
+    // Poll until the detach and reflow settle – avoids flake from async layout.
+    await expect
+      .poll(
+        async () => {
+          await waitForAnimationFrame(page);
+          const cards = await getCardData(page);
+          const movingAfter = getCardDataById(cards, movingChild.id);
+          const siblingAfter = getCardDataById(cards, sibling.id);
+          return (
+            !Object.hasOwn(movingAfter, 'parent') &&
+            Math.abs(movingAfter.x - (movingBefore.x + 80)) <= 0.01 &&
+            Math.abs(movingAfter.y - movingBefore.y) <= 0.01 &&
+            siblingAfter.parent === parent.id &&
+            Math.abs(siblingAfter.x - expectedChildX(parentBefore)) <= 0.01 &&
+            Math.abs(siblingAfter.y - expectedChildY(parentBefore, [sibling], 0)) <= 0.01
+          );
+        },
+        { timeout: 5000, intervals: [100] }
+      )
+      .toBe(true);
   });
 
   test('re-parents a managed child over a valid parent even below detach threshold', async ({
