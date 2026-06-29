@@ -34,6 +34,10 @@
   pointer-events: none;
 }
 
+.cards-card-canvas__popover > * {
+  pointer-events: auto;
+}
+
 .cards-card-canvas__card {
   position: absolute;
   background-color: #ffffff;

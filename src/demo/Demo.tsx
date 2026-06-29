@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, CardCanvas, deleteCards } from '../index';
-import type { CardCanvasCard } from '../index';
+import type { CardCanvasCard, CardChildrenLayoutMode } from '../index';
+import { normalizeMindMapLayout } from '../utils/card-layout';
 
 type LastLinkResult = {
   readonly sourceId: string;
@@ -69,6 +70,7 @@ export function Demo() {
     const nextIndex = cards.length + 1;
     const width = 180;
     const height = 120;
+    const parentId = newCardParent.trim();
     const newCard: CardCanvasCard = {
       id: `card-${nextIndex}`,
       title: newCardTitle,
@@ -80,13 +82,10 @@ export function Demo() {
       zIndex: nextIndex,
       titleStyle: { backgroundColor: newCardTitleBg },
       contentStyle: { backgroundColor: newCardContentBg },
+      ...(parentId ? { parent: parentId } : {}),
     };
 
-    if (newCardParent.trim()) {
-      newCard.parent = newCardParent.trim();
-    }
-
-    setCards([...cards, newCard]);
+    setCards(normalizeMindMapLayout([...cards, newCard]));
     if (selectNewCardOnAdd) {
       setSelected([newCard.id]);
     }
@@ -123,7 +122,7 @@ export function Demo() {
       return true;
     });
 
-    setCards(newCards);
+    setCards(normalizeMindMapLayout(newCards));
     setSelected((prev) => prev.filter((id) => newCards.some((card) => card.id === id)));
   };
 
@@ -298,35 +297,55 @@ export function Demo() {
                 {...(linkCallbackEnabled ? { onLinkClick: handleLinkClick } : {})}
                 renderCardTitle={(title: string) => <span data-card-rendered-title>{title}</span>}
                 renderCardContent={(content: string) => <span data-card-rendered-content>{content}</span>}
-                renderPopover={(card, set) => (
-                  <div
-                    className="card-canvas-demo-popover-content"
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                      padding: 12,
-                      backgroundColor: '#ffffff',
-                      border: '1px solid rgba(0,0,0,0.12)',
-                      borderRadius: 8,
-                      boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-                      minWidth: 160,
-                    }}
-                  >
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>标题</span>
-                    <input
-                      value={card.title}
-                      onChange={(e) => set({ title: e.target.value })}
-                      style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4 }}
-                    />
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>内容</span>
-                    <input
-                      value={card.content}
-                      onChange={(e) => set({ content: e.target.value })}
-                      style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4 }}
-                    />
-                  </div>
-                )}
+                renderPopover={(card, set) => {
+                  const currentLayoutMode: CardChildrenLayoutMode =
+                    card.childrenLayoutMode ?? 'free';
+                  return (
+                    <div
+                      className="card-canvas-demo-popover-content"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        padding: 12,
+                        backgroundColor: '#ffffff',
+                        border: '1px solid rgba(0,0,0,0.12)',
+                        borderRadius: 8,
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+                        minWidth: 160,
+                      }}
+                    >
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>标题</span>
+                      <input
+                        value={card.title}
+                        onChange={(e) => set({ title: e.target.value })}
+                        style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4 }}
+                      />
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>内容</span>
+                      <input
+                        value={card.content}
+                        onChange={(e) => set({ content: e.target.value })}
+                        style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4 }}
+                      />
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>子卡布局</span>
+                      <select
+                        data-card-children-layout-mode-select
+                        value={currentLayoutMode}
+                        onChange={(event) => {
+                          const nextMode: CardChildrenLayoutMode =
+                            event.target.value === 'mind-map-horizontal'
+                              ? 'mind-map-horizontal'
+                              : 'free';
+                          set({ childrenLayoutMode: nextMode });
+                        }}
+                        style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4 }}
+                      >
+                        <option value="free">Free</option>
+                        <option value="mind-map-horizontal">Mind-map horizontal</option>
+                      </select>
+                    </div>
+                  );
+                }}
               />
             </div>
           </div>
