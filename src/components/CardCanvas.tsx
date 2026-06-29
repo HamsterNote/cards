@@ -2,7 +2,10 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Fragment, useEffect, useRef, useState, useMemo } from 'react';
 import { CardCanvasItem } from './CardCanvasItem';
 import { buildCardLinkPairs } from '../utils/card-links';
+import { normalizeMindMapLayout } from '../utils/card-layout';
 import './CardCanvas.css';
+
+export type CardChildrenLayoutMode = 'free' | 'mind-map-horizontal';
 
 /** 卡片数据模型 */
 export interface CardCanvasCard {
@@ -28,6 +31,7 @@ export interface CardCanvasCard {
   contentStyle?: CSSProperties;
   /** 卡片 Z 轴层级 */
   zIndex?: number;
+  childrenLayoutMode?: CardChildrenLayoutMode;
   /** 该卡片链接的目标卡片 id 列表（link-mode 专用） */
   linkedCardIds?: readonly string[];
 }
@@ -88,6 +92,46 @@ interface LinkDragInfo {
   readonly targetCardId: string | undefined;
 }
 
+function hasCardCoordinateChanges(
+  currentCards: readonly CardCanvasCard[],
+  nextCards: readonly CardCanvasCard[]
+): boolean {
+  if (currentCards.length !== nextCards.length) {
+    return true;
+  }
+
+  return currentCards.some((card, index) => {
+    const nextCard = nextCards[index];
+    return (
+      nextCard === undefined ||
+      card.id !== nextCard.id ||
+      card.x !== nextCard.x ||
+      card.y !== nextCard.y
+    );
+  });
+}
+
+function mergeCardPatch(
+  card: CardCanvasCard,
+  data: Partial<Omit<CardCanvasCard, 'id'>>
+): CardCanvasCard {
+  return { ...card, ...data };
+}
+
+function shouldNormalizeAfterPatch(
+  before: CardCanvasCard,
+  after: CardCanvasCard
+): boolean {
+  if (after.childrenLayoutMode === 'free') {
+    return false;
+  }
+
+  return (
+    after.childrenLayoutMode === 'mind-map-horizontal' ||
+    before.childrenLayoutMode !== after.childrenLayoutMode
+  );
+}
+
 export function CardCanvas({
   cards,
   onCardsChange,
@@ -125,6 +169,13 @@ export function CardCanvas({
   const cardsRef = useRef(cards);
   useEffect(() => {
     cardsRef.current = cards;
+  }, [cards]);
+
+  useEffect(() => {
+    const normalizedCards = normalizeMindMapLayout(cards);
+    if (hasCardCoordinateChanges(cards, normalizedCards)) {
+      onCardsChangeRef.current?.(normalizedCards);
+    }
   }, [cards]);
 
   // Ref to hold the latest onClearSelection to avoid stale closures in event listeners
@@ -199,10 +250,14 @@ export function CardCanvas({
 
           // set 回调：将部分数据合并到当前卡片，并触发 onCardsChange
           const setCard = (data: Partial<Omit<CardCanvasCard, 'id'>>) => {
+            const mergedCard = mergeCardPatch(card, data);
             const next = cards.map((currentCard) =>
-              currentCard.id === card.id ? { ...currentCard, ...data } : currentCard
+              currentCard.id === card.id ? mergedCard : currentCard
             );
-            onCardsChange?.(next);
+            const nextCards = shouldNormalizeAfterPatch(card, mergedCard)
+              ? normalizeMindMapLayout(next)
+              : next;
+            onCardsChange?.(nextCards);
           };
 
           return (

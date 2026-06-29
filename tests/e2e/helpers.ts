@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import type { CardChildrenLayoutMode } from '../../src';
 
 export type DragDelta = {
   readonly x: number;
@@ -22,6 +23,7 @@ export type CardDataSnapshot = {
   readonly width: number;
   readonly height: number;
   readonly parent?: string;
+  readonly childrenLayoutMode?: CardChildrenLayoutMode;
   readonly linkedCardIds?: readonly string[];
 };
 
@@ -148,10 +150,17 @@ function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+function isCardChildrenLayoutMode(
+  value: unknown
+): value is CardChildrenLayoutMode {
+  return value === 'free' || value === 'mind-map-horizontal';
+}
+
 function isCardDataSnapshot(value: unknown): value is CardDataSnapshot {
   if (!isRecord(value)) return false;
 
   const parent = value.parent;
+  const childrenLayoutMode = value.childrenLayoutMode;
   const linkedCardIds = value.linkedCardIds;
   return (
     typeof value.id === 'string' &&
@@ -160,6 +169,8 @@ function isCardDataSnapshot(value: unknown): value is CardDataSnapshot {
     typeof value.width === 'number' &&
     typeof value.height === 'number' &&
     (parent === undefined || typeof parent === 'string') &&
+    (childrenLayoutMode === undefined ||
+      isCardChildrenLayoutMode(childrenLayoutMode)) &&
     (linkedCardIds === undefined || isStringArray(linkedCardIds))
   );
 }
