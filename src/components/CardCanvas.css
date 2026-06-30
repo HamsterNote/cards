@@ -28,6 +28,16 @@
   stroke-dasharray: 4 4;
 }
 
+.cards-card-canvas__parent-child-connector {
+  fill: none;
+  stroke: #9ca3af;
+  stroke-width: 2;
+}
+
+.cards-card-canvas__card--drag-pending-detach {
+  transform: none !important;
+}
+
 .cards-card-canvas__popover {
   position: absolute;
   z-index: 1;

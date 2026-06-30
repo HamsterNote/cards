@@ -798,7 +798,7 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(childAfter.y).toBeCloseTo(expectedChildY(parentAfter, [child], 0), 5);
   });
 
-  test('does not render hierarchy connectors for mind-map parent-child data', async ({
+  test('renders Z-shaped hierarchy connectors for mind-map parent-child', async ({
     page,
   }) => {
     // Given: a mind-map parent has two children but no linkedCardIds graph.
@@ -808,9 +808,9 @@ test.describe('CardCanvas mind-map data contract', () => {
     await loadFrozenCards(page, [parent, first, second]);
     await waitForAnimationFrame(page);
 
-    // Then: link connectors are absent and no parent-child connector selector exists.
+    // Then: link connectors are absent but parent-child connectors are rendered.
     await expect(page.locator('[data-card-link-connector]')).toHaveCount(0);
-    await expect(page.locator('[data-parent-child-connector]')).toHaveCount(0);
+    await expect(page.locator('[data-parent-child-connector]')).toHaveCount(2);
   });
 
   test('preserves free-mode attach expansion and empty-canvas detach semantics', async ({

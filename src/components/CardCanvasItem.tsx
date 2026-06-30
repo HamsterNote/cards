@@ -23,6 +23,11 @@ import {
   finalizeCardDragLayout,
   resizeCardWithMindMapNormalization,
 } from '../utils/card-layout-interactions';
+import {
+  MIND_MAP_DETACH_THRESHOLD,
+  getMindMapLayoutMode,
+  normalizeMindMapLayout,
+} from '../utils/card-layout';
 
 export interface CardCanvasItemProps {
   readonly card: CardCanvasCard;
@@ -105,6 +110,8 @@ export function CardCanvasItem({
   const linkTargetIdRef = useRef<string | undefined>(undefined);
   const canMoveOrResize = options.requireSelectionToMoveResize ? isSelected : true;
   const canMoveOrResizeRef = useRef(canMoveOrResize);
+  const isManagedChildDragRef = useRef(false);
+  const hasDetachedRef = useRef(false);
 
   useEffect(() => {
     cardPropRef.current = card;
@@ -234,6 +241,8 @@ export function CardCanvasItem({
       viewportOffsetRef.current = undefined;
       isLinkDragRef.current = false;
       linkTargetIdRef.current = undefined;
+      isManagedChildDragRef.current = false;
+      hasDetachedRef.current = false;
       if (isResizingRef.current || !canMoveOrResizeRef.current) return;
 
       const cardId = cardPropRef.current.id;
@@ -253,6 +262,16 @@ export function CardCanvasItem({
 
       onDraggingChangeRef.current?.(true);
       dragPositionSnapshot = createDragPositionSnapshot(cardsRef.current, cardId);
+      const parentCard = currentCard.parent !== undefined
+        ? cardsRef.current.find((c) => c.id === currentCard.parent)
+        : undefined;
+      isManagedChildDragRef.current =
+        currentCard.parent !== undefined &&
+        parentCard !== undefined &&
+        getMindMapLayoutMode(parentCard) === 'mind-map-horizontal';
+      if (isManagedChildDragRef.current) {
+        cardEl.classList.add('cards-card-canvas__card--drag-pending-detach');
+      }
     };
 
     const onMove = (fingers: Finger[]) => {
@@ -296,6 +315,28 @@ export function CardCanvasItem({
       const deltaX = moveOp.point.x - startOp.point.x;
       const deltaY = moveOp.point.y - startOp.point.y;
 
+      if (isManagedChildDragRef.current && !hasDetachedRef.current) {
+        const dragDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        if (dragDistance < MIND_MAP_DETACH_THRESHOLD) {
+          didMoveRef.current = true;
+          return;
+        }
+        hasDetachedRef.current = true;
+        cardEl.classList.remove('cards-card-canvas__card--drag-pending-detach');
+        const detachedCards = cardsRef.current.map((c) => {
+          if (c.id !== cardId) return c;
+          const detached = { ...c };
+          delete detached.parent;
+          return detached;
+        });
+        const normalizedCards = normalizeMindMapLayout(detachedCards);
+        cardsRef.current = normalizedCards;
+        cardPropRef.current =
+          normalizedCards.find((c) => c.id === cardId) ?? cardPropRef.current;
+        onCardsChangeRef.current(normalizedCards);
+        dragPositionSnapshot = createDragPositionSnapshot(normalizedCards, cardId);
+      }
+
       const moveResult = moveCardsFromSnapshot(
         cardsRef.current,
         dragPositionSnapshot,
@@ -328,6 +369,7 @@ export function CardCanvasItem({
       cardEl.style.transform = '';
 
       if (isLinkDragRef.current) {
+        cardEl.classList.remove('cards-card-canvas__card--drag-pending-detach');
         const sourceCardId = cardPropRef.current.id;
         const targetCardId = linkTargetIdRef.current;
         if (targetCardId !== undefined && targetCardId !== sourceCardId) {
@@ -379,6 +421,16 @@ export function CardCanvasItem({
           cardsRef.current = finalCards;
           onCardsChangeRef.current(finalCards);
         }
+      }
+
+      if (isManagedChildDragRef.current && !hasDetachedRef.current) {
+        resetCardElementToModelPosition();
+        window.requestAnimationFrame(() => {
+          resetCardElementToModelPosition();
+          cardEl.classList.remove('cards-card-canvas__card--drag-pending-detach');
+        });
+      } else {
+        cardEl.classList.remove('cards-card-canvas__card--drag-pending-detach');
       }
 
       setParentCandidateId(undefined);

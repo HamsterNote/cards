@@ -209,24 +209,57 @@ export function assignParentFromPoint(
     excludeIds
   );
   let draggedCard: CardCanvasCard | undefined;
+
+  // 情况 1：没有父级候选 — 移除父级关系
+  if (candidateId === undefined) {
+    const cardWithoutParent = { ...currentDraggedCard };
+    delete cardWithoutParent.parent;
+    draggedCard = cardWithoutParent;
+    return {
+      cards: cards.map((card) =>
+        card.id === draggedCardId ? cardWithoutParent : card
+      ),
+      draggedCard,
+    };
+  }
+
+  // 情况 2：父级关系未变化
+  if (currentDraggedCard.parent === candidateId) {
+    draggedCard = currentDraggedCard;
+    return { cards: [...cards], draggedCard };
+  }
+
+  // 情况 3：分配新的父级 — 确保子卡片及其所有后代的 z-index 高于父卡片，
+  // 否则子卡片会被父卡片的背景遮挡。
+  const parentCard = cards.find((card) => card.id === candidateId);
+  const parentZIndex = parentCard?.zIndex ?? 0;
+  const draggedZIndex = currentDraggedCard.zIndex ?? 0;
+  // 计算需要提升的 z-index 增量：当子卡片 z-index 不高于父卡片时，将整个子树
+  // 整体平移，使其最低层（拖拽卡片自身）刚好高于父卡片，同时保持子树内部相对层级不变。
+  const zIndexDelta =
+    draggedZIndex <= parentZIndex ? parentZIndex + 1 - draggedZIndex : 0;
+
+  // 收集拖拽卡片的所有后代 id（包括自身），需要同步平移 z-index
+  const subtreeIds = new Set<string>([
+    draggedCardId,
+    ...getDescendantIds(cards, draggedCardId),
+  ]);
+
   const nextCards = cards.map((card) => {
-    if (card.id !== draggedCardId) return card;
+    if (!subtreeIds.has(card.id)) return card;
 
-    if (candidateId === undefined) {
-      const cardWithoutParent = { ...card };
-      delete cardWithoutParent.parent;
-      draggedCard = cardWithoutParent;
-      return cardWithoutParent;
+    if (card.id === draggedCardId) {
+      const nextCard = {
+        ...card,
+        parent: candidateId,
+        zIndex: (card.zIndex ?? 0) + zIndexDelta,
+      };
+      draggedCard = nextCard;
+      return nextCard;
     }
 
-    if (card.parent === candidateId) {
-      draggedCard = card;
-      return card;
-    }
-
-    const nextCard = { ...card, parent: candidateId };
-    draggedCard = nextCard;
-    return nextCard;
+    // 后代卡片：同步提升 z-index 以保持子树内部的相对层级关系
+    return { ...card, zIndex: (card.zIndex ?? 0) + zIndexDelta };
   });
 
   return { cards: nextCards, draggedCard };

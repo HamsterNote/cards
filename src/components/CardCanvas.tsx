@@ -2,7 +2,11 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Fragment, useEffect, useRef, useState, useMemo } from 'react';
 import { CardCanvasItem } from './CardCanvasItem';
 import { buildCardLinkPairs } from '../utils/card-links';
-import { normalizeMindMapLayout } from '../utils/card-layout';
+import {
+  MIND_MAP_HORIZONTAL_GAP,
+  getMindMapLayoutMode,
+  normalizeMindMapLayout,
+} from '../utils/card-layout';
 import './CardCanvas.css';
 
 export type CardChildrenLayoutMode = 'free' | 'mind-map-horizontal';
@@ -190,17 +194,18 @@ export function CardCanvas({
     if (!onClearSelection || !selected || selected.length === 0) return;
 
     const handlePointerDown = (event: PointerEvent) => {
-      // Check if the click is inside a card element
-      const isInsideCard = event
+      // 检查点击是否发生在卡片或 Popover 内部——两者都不应触发取消选择
+      const isInsideCardOrPopover = event
         .composedPath()
         .some(
           (target) =>
             target instanceof HTMLElement &&
-            target.classList.contains('cards-card-canvas__card')
+            (target.classList.contains('cards-card-canvas__card') ||
+              target.classList.contains('cards-card-canvas__popover'))
         );
 
-      // If click is outside all cards, clear selection
-      if (!isInsideCard) {
+      // 如果点击在所有卡片和 Popover 之外，才清空选择
+      if (!isInsideCardOrPopover) {
         onClearSelectionRef.current?.();
       }
     };
@@ -212,6 +217,11 @@ export function CardCanvas({
   }, [onClearSelection, selected]);
 
   const linkPairs = useMemo(() => buildCardLinkPairs(cards), [cards]);
+
+  const maxCardZIndex = useMemo(
+    () => cards.reduce((max, c) => Math.max(max, c.zIndex ?? 0), 0),
+    [cards]
+  );
 
   return (
     <div className={`cards-card-canvas__wrapper ${className}`}>
@@ -239,6 +249,28 @@ export function CardCanvas({
                 y1={sourceY}
                 x2={targetX}
                 y2={targetY}
+              />
+            );
+          })}
+          {cards.map((childCard) => {
+            if (!childCard.parent) return null;
+            const parentCard = cards.find((c) => c.id === childCard.parent);
+            if (!parentCard || getMindMapLayoutMode(parentCard) !== 'mind-map-horizontal') return null;
+
+            const parentRightX = parentCard.x + parentCard.width;
+            const parentCenterY = parentCard.y + parentCard.height / 2;
+            const childCenterY = childCard.y + childCard.height / 2;
+            const childLeftX = childCard.x;
+            const midX = parentRightX + MIND_MAP_HORIZONTAL_GAP / 2;
+
+            const d = `M ${parentRightX} ${parentCenterY} L ${midX} ${parentCenterY} L ${midX} ${childCenterY} L ${childLeftX} ${childCenterY}`;
+
+            return (
+              <path
+                key={`pc-${parentCard.id}-${childCard.id}`}
+                data-parent-child-connector
+                className="cards-card-canvas__parent-child-connector"
+                d={d}
               />
             );
           })}
@@ -306,7 +338,7 @@ export function CardCanvas({
                   style={{
                     left: card.x,
                     top: card.y + card.height + 8,
-                    zIndex: (card.zIndex ?? 0) + 1,
+                    zIndex: maxCardZIndex + 1,
                   }}
                 >
                   {renderPopover(card, setCard)}
