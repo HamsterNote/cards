@@ -159,7 +159,7 @@ test.describe('CardCanvas mind-map data contract', () => {
     await page.goto('/');
   });
 
-  test('treats missing childrenLayoutMode as free mode without serializing the field', async ({
+  test('treats missing childrenLayoutMode as arrange mode without serializing the field', async ({
     page,
   }) => {
     // Given: parent/child cards are frozen and intentionally omit childrenLayoutMode.
@@ -171,9 +171,10 @@ test.describe('CardCanvas mind-map data contract', () => {
     const cards = await getCardData(page);
     const child = getCardDataById(cards, childCard.id);
 
-    // Then: free-mode coordinates and hierarchy are preserved without adding the optional field.
-    expect(child.x).toBe(childCard.x);
-    expect(child.y).toBe(childCard.y);
+    // Then: arrange-mode repositions the child inside the parent's content area;
+    // the optional field is still not serialized.
+    expect(child.x).toBe(parentCard.x + 13);
+    expect(child.y).toBe(parentCard.y + 50);
     expect(child.parent).toBe(parentCard.id);
     expectModeAbsent(getCardDataById(cards, parentCard.id));
     expectModeAbsent(child);
@@ -260,8 +261,10 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a free parent with one child is selected in the Demo.
+    // 显式指定 'free' 模式，否则默认 'arrange' 会将子卡片排列到父卡片内部
+    const freeParent = Object.freeze({ ...parentCard, childrenLayoutMode: 'free' as const });
     const detachedChild = Object.freeze({ ...childCard, x: 520, y: 120 });
-    await loadFrozenCards(page, [parentCard, detachedChild]);
+    await loadFrozenCards(page, [freeParent, detachedChild]);
     await selectCard(page, parentCard.id);
 
     // When: the popover mode control switches to horizontal mind-map.
@@ -356,7 +359,8 @@ test.describe('CardCanvas mind-map data contract', () => {
     // Given: a root mind-map has a nested mind-map branch whose subtree affects root spacing.
     const root = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
     const branch = Object.freeze({ ...childCard, id: 'branch', height: 80, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const nested = Object.freeze({ ...childCard, id: 'nested', parent: branch.id, height: 120 });
+    // 显式指定 'free' 模式，避免 arrange 将 leaf 排列进 nested 内部导致点击误中 leaf
+    const nested = Object.freeze({ ...childCard, id: 'nested', parent: branch.id, height: 120, childrenLayoutMode: 'free' as const });
     const nestedSibling = Object.freeze({ ...childCard, id: 'nested-sibling', parent: branch.id, height: 120 });
     const leaf = Object.freeze({ ...childCard, id: 'leaf', parent: nested.id, height: 60 });
     const rootSibling = Object.freeze({ ...childCard, id: 'root-sibling', height: 80 });
@@ -424,7 +428,8 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a frozen free parent and a large free card that will protrude after drop.
-    const freeParent = Object.freeze({ ...parentCard });
+    // 显式指定 'free' 模式以测试 free 模式的 containment expansion 行为
+    const freeParent = Object.freeze({ ...parentCard, childrenLayoutMode: 'free' as const });
     const freeChild = Object.freeze({
       ...childCard,
       id: 'free-mode-child',
@@ -740,8 +745,9 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a free-mode hierarchy uses the legacy resize contract.
-    const parent = Object.freeze({ ...parentCard, id: 'free-resize-parent' });
-    const child = Object.freeze({ ...childCard, id: 'free-resize-child', parent: parent.id });
+    // 显式指定 'free' 模式以测试 free 模式下 resize 不影响后代位置的行为
+    const parent = Object.freeze({ ...parentCard, id: 'free-resize-parent', childrenLayoutMode: 'free' as const });
+    const child = Object.freeze({ ...childCard, id: 'free-resize-child', parent: parent.id, childrenLayoutMode: 'free' as const });
     const grandchild = Object.freeze({
       ...childCard,
       id: 'free-resize-grandchild',
@@ -819,7 +825,8 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a free parent and a free child start without mind-map mode.
-    const parent = Object.freeze({ ...parentCard, id: 'free-regression-parent' });
+    // 显式指定 'free' 模式以测试 free 模式的 attach expansion 和 detach 语义
+    const parent = Object.freeze({ ...parentCard, id: 'free-regression-parent', childrenLayoutMode: 'free' as const });
     const child = Object.freeze({
       ...childCard,
       id: 'free-regression-child',

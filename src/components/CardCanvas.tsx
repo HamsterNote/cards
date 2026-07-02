@@ -10,7 +10,11 @@ import {
 } from '../utils/card-layout';
 import './CardCanvas.css';
 
-export type CardChildrenLayoutMode = 'free' | 'mind-map-horizontal';
+// 子卡布局模式：
+// - 'free'：自由放置，子卡片可在任意位置
+// - 'mind-map-horizontal'：导图横向布局，子卡片在父卡右侧垂直居中排列
+// - 'arrange'：排列布局，子卡片在父卡内容区内从左到右、从上到下流式排列
+export type CardChildrenLayoutMode = 'free' | 'mind-map-horizontal' | 'arrange';
 
 /** 卡片数据模型 */
 export interface CardCanvasCard {
@@ -127,14 +131,20 @@ function shouldNormalizeAfterPatch(
   before: CardCanvasCard,
   after: CardCanvasCard
 ): boolean {
-  if (after.childrenLayoutMode === 'free') {
+  // 使用 getMindMapLayoutMode 获取有效模式，使 undefined 也被当作 'arrange' 处理
+  const beforeMode = getMindMapLayoutMode(before);
+  const afterMode = getMindMapLayoutMode(after);
+
+  // free 模式不自动归一化子卡片位置
+  if (afterMode === 'free') {
     return false;
   }
 
-  return (
-    after.childrenLayoutMode === 'mind-map-horizontal' ||
-    before.childrenLayoutMode !== after.childrenLayoutMode
-  );
+  // mind-map-horizontal 与 arrange 模式都需要归一化以重新定位子卡片；
+  // 模式切换时也需要重新归一化
+  return beforeMode !== afterMode ||
+    afterMode === 'mind-map-horizontal' ||
+    afterMode === 'arrange';
 }
 
 export function CardCanvas({
