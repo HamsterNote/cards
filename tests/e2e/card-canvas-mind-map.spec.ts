@@ -717,17 +717,19 @@ test.describe('CardCanvas mind-map data contract', () => {
     await waitForAnimationFrame(page);
     const beforeSecond = getCardDataById(await getCardData(page), second.id);
 
-    // When: the first child's height increases by 40px.
+    // When: the first child is resized by dragging 40px down.
+    // 管控子卡片因垂直居中布局，高度 delta 会被 x2 补偿（底边跟手），
+    // 所以拖 40px 实际高度增加 80px。
     const delta = { x: 0, y: 40 };
     await resizeCardBy(page, first.id, delta);
     await waitForAnimationFrame(page);
 
-    // Then: sibling slots are recomputed from the resized child height.
+    // Then: sibling slots are recomputed from the compensated child height.
     const cards = await getCardData(page);
     const parentAfter = getCardDataById(cards, parent.id);
     const firstAfter = getCardDataById(cards, first.id);
     const secondAfter = getCardDataById(cards, second.id);
-    const resizedFirst = { ...first, height: first.height + delta.y };
+    const resizedFirst = { ...first, height: first.height + delta.y * 2 };
     expect(firstAfter.height).toBeCloseTo(resizedFirst.height, 5);
     expect(secondAfter.y).not.toBeCloseTo(beforeSecond.y, 5);
     expect(firstAfter.y).toBeCloseTo(expectedChildY(parentAfter, [resizedFirst, second], 0), 5);

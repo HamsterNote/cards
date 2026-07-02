@@ -490,11 +490,25 @@ export function CardCanvasItem({
 
     let initialWidth = cardPropRef.current.width;
     let initialHeight = cardPropRef.current.height;
+    // mindmap 管控子卡片（父卡片为 mind-map-horizontal 布局）在垂直方向居中排列，
+    // resize 时高度变化会让上下边界同时移动（各 delta/2），底边实际只走了拖拽距离的一半。
+    // 此标记用于在 handleMove 中将高度 delta x2，使底边跟手。
+    let isManagedChildResize = false;
 
     const handleStart = () => {
       if (!canMoveOrResizeRef.current) return;
       initialWidth = cardPropRef.current.width;
       initialHeight = cardPropRef.current.height;
+      // 判断被 resize 的卡片是否为 mindmap 管控子卡片
+      const currentCard = cardPropRef.current;
+      const parentCard =
+        currentCard.parent !== undefined
+          ? cardsRef.current.find((c) => c.id === currentCard.parent)
+          : undefined;
+      isManagedChildResize =
+        currentCard.parent !== undefined &&
+        parentCard !== undefined &&
+        getMindMapLayoutMode(parentCard) === 'mind-map-horizontal';
       setParentCandidateId(undefined);
     };
 
@@ -516,7 +530,10 @@ export function CardCanvasItem({
       const deltaX = moveOp.point.x - startOp.point.x;
       const deltaY = moveOp.point.y - startOp.point.y;
       const nextWidth = Math.max(80, initialWidth + deltaX);
-      const nextHeight = Math.max(80, initialHeight + deltaY);
+      // 管控子卡片因垂直居中布局，高度变化会导致上下边界同时移动（各 delta/2），
+      // 底边实际只走了 deltaY 的一半。将高度 delta x2 使底边跟手。
+      const effectiveDeltaY = isManagedChildResize ? deltaY * 2 : deltaY;
+      const nextHeight = Math.max(80, initialHeight + effectiveDeltaY);
       const cardId = cardPropRef.current.id;
 
       const layoutResult = resizeCardWithMindMapNormalization(cardsRef.current, cardId, {
