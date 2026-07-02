@@ -163,7 +163,8 @@ body {
   pointer-events: none;
 }
 
-.card-canvas-demo-popover-content input {
+.card-canvas-demo-popover-content input,
+.card-canvas-demo-popover-content select {
   pointer-events: auto;
 }
 
