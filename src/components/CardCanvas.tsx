@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Fragment, useEffect, useRef, useState, useMemo } from 'react';
 import { CardCanvasItem } from './CardCanvasItem';
 import { buildCardLinkPairs } from '../utils/card-links';
+import { isCardCanvasInteractivePointerTarget } from '../utils/card-popover-interactions';
 import {
   MIND_MAP_HORIZONTAL_GAP,
   getMindMapLayoutMode,
@@ -194,18 +195,8 @@ export function CardCanvas({
     if (!onClearSelection || !selected || selected.length === 0) return;
 
     const handlePointerDown = (event: PointerEvent) => {
-      // 检查点击是否发生在卡片或 Popover 内部——两者都不应触发取消选择
-      const isInsideCardOrPopover = event
-        .composedPath()
-        .some(
-          (target) =>
-            target instanceof HTMLElement &&
-            (target.classList.contains('cards-card-canvas__card') ||
-              target.classList.contains('cards-card-canvas__popover'))
-        );
-
-      // 如果点击在所有卡片和 Popover 之外，才清空选择
-      if (!isInsideCardOrPopover) {
+      // 如果点击在所有卡片、Popover 及其关联 portal 浮层之外，才清空选择。
+      if (!isCardCanvasInteractivePointerTarget(event)) {
         onClearSelectionRef.current?.();
       }
     };
