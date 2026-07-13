@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 import type { CardCanvasCard } from '../../src';
-import { deleteCards, findParentCandidateId } from '../../src/utils/cards';
+import {
+  assignParentFromPoint,
+  deleteCards,
+  findParentCandidateId,
+} from '../../src/utils/cards';
 
 class CallbackRejectedError extends Error {
   constructor() {
@@ -324,5 +328,35 @@ test.describe('findParentCandidateId utility', () => {
 
     // Then: later array order breaks the tie.
     expect(result).toBe('later');
+  });
+});
+
+test.describe('assignParentFromPoint utility', () => {
+  test('raises the entire dragged subtree above its new parent', () => {
+    // Given: a subtree descendant is below both its root and the new parent.
+    const dragged = { ...makeCard('dragged'), x: 200, zIndex: 10 };
+    const descendant = { ...makeCard('descendant', 'dragged'), zIndex: 1 };
+    const parent = {
+      ...makeCard('parent'),
+      width: 100,
+      height: 100,
+      zIndex: 20,
+    };
+
+    // When: the subtree root is assigned to the new parent.
+    const result = assignParentFromPoint(
+      [dragged, descendant, parent],
+      'dragged',
+      { x: 50, y: 50 }
+    );
+
+    // Then: every card in the subtree remains above the new parent.
+    const nextDragged = result.cards.find((card) => card.id === 'dragged');
+    const nextDescendant = result.cards.find(
+      (card) => card.id === 'descendant'
+    );
+    expect(nextDragged?.parent).toBe('parent');
+    expect(nextDragged?.zIndex).toBeGreaterThan(parent.zIndex);
+    expect(nextDescendant?.zIndex).toBeGreaterThan(parent.zIndex);
   });
 });

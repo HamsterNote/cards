@@ -4,6 +4,21 @@ export type DeleteCardsMeta = {
   readonly hasChildren: boolean;
 };
 
+/**
+ * 父卡片 content 区域（去掉 padding 后）相对于卡片左上角的偏移量。
+ * 用于计算父卡片是否完全包含子卡片，以及需要扩展到多大。
+ */
+export interface ContentInset {
+  /** content 内区域左边界相对卡片左上角的水平偏移（border + header + content-padding-left） */
+  readonly left: number;
+  /** content 内区域上边界相对卡片左上角的垂直偏移 */
+  readonly top: number;
+  /** 卡片右边界到 content 内区域右边界的距离（border + content-padding-right） */
+  readonly right: number;
+  /** 卡片底边界到 content 内区域底边界的距离（border + content-padding-bottom） */
+  readonly bottom: number;
+}
+
 export type DeleteCardsCallback = (
   cards: readonly CardCanvasCard[],
   deleteIds: readonly string[],
@@ -104,13 +119,17 @@ function containsPoint(card: CardCanvasCard, point: CardPoint): boolean {
 export function findParentCandidateId(
   cards: readonly CardCanvasCard[],
   draggedCardId: string,
-  point: CardPoint
+  point: CardPoint,
+  excludeIds?: ReadonlySet<string>
 ): string | undefined {
   let candidateId: string | undefined;
   let candidateZIndex = Number.NEGATIVE_INFINITY;
   let candidateIndex = -1;
 
   for (const [index, card] of cards.entries()) {
+    // 正在移动的卡片（拖拽卡片自身及其子级）一律不参与父级判定
+    if (excludeIds?.has(card.id)) continue;
+
     const zIndex = card.zIndex ?? 0;
     const isBetterCandidate =
       zIndex > candidateZIndex ||
@@ -175,36 +194,117 @@ export function moveCardsFromSnapshot(
 export function assignParentFromPoint(
   cards: readonly CardCanvasCard[],
   draggedCardId: string,
-  point: CardPoint
+  point: CardPoint,
+  excludeIds?: ReadonlySet<string>
 ): CardUpdateResult {
   const currentDraggedCard = cards.find((card) => card.id === draggedCardId);
   if (currentDraggedCard === undefined) {
     return { cards: [...cards], draggedCard: undefined };
   }
 
-  const candidateId = findParentCandidateId(cards, draggedCardId, point);
+  const candidateId = findParentCandidateId(
+    cards,
+    draggedCardId,
+    point,
+    excludeIds
+  );
   let draggedCard: CardCanvasCard | undefined;
+
+  // 情况 1：没有父级候选 — 移除父级关系
+  if (candidateId === undefined) {
+    const cardWithoutParent = { ...currentDraggedCard };
+    delete cardWithoutParent.parent;
+    draggedCard = cardWithoutParent;
+    return {
+      cards: cards.map((card) =>
+        card.id === draggedCardId ? cardWithoutParent : card
+      ),
+      draggedCard,
+    };
+  }
+
+  // 情况 2：父级关系未变化
+  if (currentDraggedCard.parent === candidateId) {
+    draggedCard = currentDraggedCard;
+    return { cards: [...cards], draggedCard };
+  }
+
+  // 情况 3：分配新的父级 — 确保子卡片及其所有后代的 z-index 高于父卡片，
+  // 否则子卡片会被父卡片的背景遮挡。
+  const parentCard = cards.find((card) => card.id === candidateId);
+  const parentZIndex = parentCard?.zIndex ?? 0;
+  // 收集拖拽卡片的所有后代 id（包括自身），需要同步平移 z-index
+  const subtreeIds = new Set<string>([
+    draggedCardId,
+    ...getDescendantIds(cards, draggedCardId),
+  ]);
+  const minimumSubtreeZIndex = cards.reduce(
+    (minimum, card) =>
+      subtreeIds.has(card.id) ? Math.min(minimum, card.zIndex ?? 0) : minimum,
+    currentDraggedCard.zIndex ?? 0
+  );
+  // 按子树最低层计算统一增量，既保证全部后代高于新父卡，又保持内部相对层级。
+  const zIndexDelta =
+    minimumSubtreeZIndex <= parentZIndex
+      ? parentZIndex + 1 - minimumSubtreeZIndex
+      : 0;
+
   const nextCards = cards.map((card) => {
-    if (card.id !== draggedCardId) return card;
+    if (!subtreeIds.has(card.id)) return card;
 
-    if (candidateId === undefined) {
-      const cardWithoutParent = { ...card };
-      delete cardWithoutParent.parent;
-      draggedCard = cardWithoutParent;
-      return cardWithoutParent;
+    if (card.id === draggedCardId) {
+      const nextCard = {
+        ...card,
+        parent: candidateId,
+        zIndex: (card.zIndex ?? 0) + zIndexDelta,
+      };
+      draggedCard = nextCard;
+      return nextCard;
     }
 
-    if (card.parent === candidateId) {
-      draggedCard = card;
-      return card;
-    }
-
-    const nextCard = { ...card, parent: candidateId };
-    draggedCard = nextCard;
-    return nextCard;
+    // 后代卡片：同步提升 z-index 以保持子树内部的相对层级关系
+    return { ...card, zIndex: (card.zIndex ?? 0) + zIndexDelta };
   });
 
   return { cards: nextCards, draggedCard };
+}
+
+/**
+ * 扩展父卡片尺寸，使其 content 区域（去掉 padding 后）完全包含所有直接子卡片。
+ * 仅向右/下方向扩展（增大 width/height），不会缩小或移动卡片位置。
+ */
+export function expandParentToContainChildren(
+  cards: readonly CardCanvasCard[],
+  parentId: string,
+  inset: ContentInset
+): CardCanvasCard[] {
+  const parent = cards.find((card) => card.id === parentId);
+  if (parent === undefined) return [...cards];
+
+  const children = cards.filter((card) => card.parent === parentId);
+  if (children.length === 0) return [...cards];
+
+  let needWidth = parent.width;
+  let needHeight = parent.height;
+
+  for (const child of children) {
+    const childRight = child.x + child.width;
+    const childBottom = child.y + child.height;
+    const requiredWidth = childRight - parent.x + inset.right;
+    const requiredHeight = childBottom - parent.y + inset.bottom;
+    if (requiredWidth > needWidth) needWidth = requiredWidth;
+    if (requiredHeight > needHeight) needHeight = requiredHeight;
+  }
+
+  if (needWidth === parent.width && needHeight === parent.height) {
+    return [...cards];
+  }
+
+  return cards.map((card) =>
+    card.id === parentId
+      ? { ...card, width: needWidth, height: needHeight }
+      : card
+  );
 }
 
 function normalizeDeleteIds(
