@@ -129,7 +129,7 @@ body {
 
 .card-canvas-demo-layout {
   flex-wrap: nowrap;
-  align-items: stretch;
+  align-items: flex-start;
 }
 
 .card-canvas-demo-settings {
@@ -140,6 +140,7 @@ body {
 
 .card-canvas-demo-stage {
   flex: 1;
+  height: 400px;
   min-height: 400px;
   position: relative;
   overflow: hidden;

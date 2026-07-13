@@ -1,6 +1,41 @@
-import { useState } from 'react';
-import type { CardCanvasCard } from '../index';
+import { useEffect, useState } from 'react';
 import { Button, CardCanvas, deleteCards } from '../index';
+import type { CardCanvasCard, CardChildrenLayoutMode } from '../index';
+import { normalizeMindMapLayout } from '../utils/card-layout';
+
+type LastLinkResult = {
+  readonly sourceId: string;
+  readonly sourceTitle: string;
+  readonly targetId: string;
+  readonly targetTitle: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isCardCanvasCard(value: unknown): value is CardCanvasCard {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.content === 'string' &&
+    typeof value.x === 'number' &&
+    typeof value.y === 'number' &&
+    typeof value.width === 'number' &&
+    typeof value.height === 'number'
+  );
+}
+
+function isSetCardsEvent(
+  event: Event
+): event is CustomEvent<readonly CardCanvasCard[]> {
+  return (
+    event instanceof CustomEvent &&
+    Array.isArray(event.detail) &&
+    event.detail.every(isCardCanvasCard)
+  );
+}
 
 export function Demo() {
   const [cards, setCards] = useState<CardCanvasCard[]>([]);
@@ -14,29 +49,51 @@ export function Demo() {
   const [requireSelectionToMoveResize, setRequireSelectionToMoveResize] =
     useState(false);
   const [selectOnMoveEnd, setSelectOnMoveEnd] = useState(false);
+  const [selectNewCardOnAdd, setSelectNewCardOnAdd] = useState(true);
+  const [linkMode, setLinkMode] = useState(false);
+  const [linkCallbackEnabled, setLinkCallbackEnabled] = useState(true);
+  const [lastLinkResult, setLastLinkResult] = useState<LastLinkResult | null>(
+    null
+  );
+
+  useEffect(() => {
+    const handleSetCards = (event: Event) => {
+      if (isSetCardsEvent(event)) {
+        setCards([...event.detail]);
+      }
+    };
+
+    window.addEventListener('card-canvas-demo:set-cards', handleSetCards);
+    return () => {
+      window.removeEventListener('card-canvas-demo:set-cards', handleSetCards);
+    };
+  }, []);
 
   const handleAddCard = () => {
     if (!newCardTitle.trim() || !newCardContent.trim()) return;
 
     const nextIndex = cards.length + 1;
+    const width = 180;
+    const height = 120;
+    const parentId = newCardParent.trim();
     const newCard: CardCanvasCard = {
       id: `card-${nextIndex}`,
       title: newCardTitle,
       content: newCardContent,
-      x: 0,
-      y: 0,
-      width: 180,
-      height: 120,
+      x: -width / 2,
+      y: -height / 2,
+      width,
+      height,
       zIndex: nextIndex,
       titleStyle: { backgroundColor: newCardTitleBg },
       contentStyle: { backgroundColor: newCardContentBg },
+      ...(parentId ? { parent: parentId } : {}),
     };
 
-    if (newCardParent.trim()) {
-      newCard.parent = newCardParent.trim();
+    setCards(normalizeMindMapLayout([...cards, newCard]));
+    if (selectNewCardOnAdd) {
+      setSelected([newCard.id]);
     }
-
-    setCards([...cards, newCard]);
     setNewCardTitle('');
     setNewCardContent('');
     setNewCardParent('');
@@ -49,6 +106,18 @@ export function Demo() {
 
   const handleClearSelection = () => {
     setSelected([]);
+  };
+
+  const handleLinkClick = (
+    targetCard: CardCanvasCard,
+    sourceCard: CardCanvasCard
+  ) => {
+    setLastLinkResult({
+      targetId: targetCard.id,
+      targetTitle: targetCard.title,
+      sourceId: sourceCard.id,
+      sourceTitle: sourceCard.title,
+    });
   };
 
   const handleDeleteSelected = async () => {
@@ -65,7 +134,7 @@ export function Demo() {
       }
     );
 
-    setCards(newCards);
+    setCards(normalizeMindMapLayout(newCards));
     setSelected((prev) =>
       prev.filter((id) => newCards.some((card) => card.id === id))
     );
@@ -108,6 +177,23 @@ export function Demo() {
                 placeholder="Card Content"
               />
             </div>
+            <Button
+              data-card-add-button
+              variant="filled"
+              size="md"
+              onClick={handleAddCard}
+            >
+              Add Card
+            </Button>
+            <Button
+              data-testid="delete-selected-card"
+              variant="filled"
+              size="md"
+              disabled={selected.length === 0}
+              onClick={handleDeleteSelected}
+            >
+              Delete Selected
+            </Button>
             <div className="demo__form-group">
               <label htmlFor="card-title-bg">Title Background</label>
               <input
@@ -162,23 +248,59 @@ export function Demo() {
                 Select moved card after drag
               </label>
             </div>
-            <Button
-              data-card-add-button
-              variant="filled"
-              size="md"
-              onClick={handleAddCard}
-            >
-              Add Card
-            </Button>
-            <Button
-              data-testid="delete-selected-card"
-              variant="filled"
-              size="md"
-              disabled={selected.length === 0}
-              onClick={handleDeleteSelected}
-            >
-              Delete Selected
-            </Button>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-select-new-card-toggle
+                  checked={selectNewCardOnAdd}
+                  onChange={(e) => setSelectNewCardOnAdd(e.target.checked)}
+                />
+                Select newly added card
+              </label>
+            </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-link-mode-toggle
+                  checked={linkMode}
+                  onChange={(e) => setLinkMode(e.target.checked)}
+                />
+                Link mode
+              </label>
+            </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-link-callback-enabled-toggle
+                  checked={linkCallbackEnabled}
+                  onChange={(e) => setLinkCallbackEnabled(e.target.checked)}
+                />
+                Enable link callback
+              </label>
+            </div>
+            <div className="demo__data-display">
+              <h3 className="demo__data-display-title">Last Link Result</h3>
+              <div
+                className="demo__data-display-content"
+                data-card-link-callback-result
+              >
+                {lastLinkResult ? (
+                  <>
+                    <div data-card-link-source-id={lastLinkResult.sourceId}>
+                      Source: {lastLinkResult.sourceTitle}
+                    </div>
+                    <div data-card-link-target-id={lastLinkResult.targetId}>
+                      Target: {lastLinkResult.targetTitle}
+                    </div>
+                  </>
+                ) : (
+                  'None'
+                )}
+              </div>
+            </div>
           </div>
           <div className="card-canvas-demo-stage">
             <div className="card-canvas-demo-stage-wrapper">
@@ -190,12 +312,85 @@ export function Demo() {
                 onClearSelection={handleClearSelection}
                 className="card-canvas-demo-transform"
                 options={{ requireSelectionToMoveResize, selectOnMoveEnd }}
+                linkMode={linkMode}
+                {...(linkCallbackEnabled
+                  ? { onLinkClick: handleLinkClick }
+                  : {})}
                 renderCardTitle={(title: string) => (
                   <span data-card-rendered-title>{title}</span>
                 )}
                 renderCardContent={(content: string) => (
                   <span data-card-rendered-content>{content}</span>
                 )}
+                renderPopover={(card, set) => {
+                  const currentLayoutMode: CardChildrenLayoutMode =
+                    card.childrenLayoutMode ?? 'free';
+                  return (
+                    <div
+                      className="card-canvas-demo-popover-content"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        padding: 12,
+                        backgroundColor: '#ffffff',
+                        border: '1px solid rgba(0,0,0,0.12)',
+                        borderRadius: 8,
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+                        minWidth: 160,
+                      }}
+                    >
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>
+                        标题
+                      </span>
+                      <input
+                        value={card.title}
+                        onChange={(e) => set({ title: e.target.value })}
+                        style={{
+                          padding: '4px 8px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: 4,
+                        }}
+                      />
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>
+                        内容
+                      </span>
+                      <input
+                        value={card.content}
+                        onChange={(e) => set({ content: e.target.value })}
+                        style={{
+                          padding: '4px 8px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: 4,
+                        }}
+                      />
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>
+                        子卡布局
+                      </span>
+                      <select
+                        data-card-children-layout-mode-select
+                        value={currentLayoutMode}
+                        onChange={(event) => {
+                          const nextMode: CardChildrenLayoutMode =
+                            event.target.value === 'mind-map-horizontal'
+                              ? 'mind-map-horizontal'
+                              : 'free';
+                          set({ childrenLayoutMode: nextMode });
+                        }}
+                        style={{
+                          padding: '4px 8px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: 4,
+                        }}
+                      >
+                        <option value="free">Free</option>
+                        <option value="mind-map-horizontal">
+                          Mind-map horizontal
+                        </option>
+                      </select>
+                    </div>
+                  );
+                }}
               />
             </div>
           </div>
