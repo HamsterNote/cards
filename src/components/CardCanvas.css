@@ -225,8 +225,8 @@
  * 空间不足时由 card-content（flex:1 + overflow:auto）承担滚动，footer 始终可见。
  */
 .cards-card-canvas__card-footer {
-  flex-shrink: 0;          /* 关键：不被压缩，Links 始终完整展示 */
-  padding: 12px;           /* 自带 padding，不再依赖 content 的 padding */
+  flex-shrink: 0; /* 关键：不被压缩，Links 始终完整展示 */
+  padding: 12px; /* 自带 padding，不再依赖 content 的 padding */
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;

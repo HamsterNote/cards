@@ -70,7 +70,8 @@ export function assignParentAtPointer(
     draggedCard:
       assignedCard === undefined
         ? undefined
-        : finalCards.find((candidate) => candidate.id === cardId) ?? assignedCard,
+        : (finalCards.find((candidate) => candidate.id === cardId) ??
+          assignedCard),
   };
 }
 
@@ -102,7 +103,13 @@ export function finalizeCardDragLayout(
   );
 
   if (!isManagedChild || candidateId !== undefined) {
-    return assignParentAtPointer(cards, cardId, pointerPoint, movingCardIds, options);
+    return assignParentAtPointer(
+      cards,
+      cardId,
+      pointerPoint,
+      movingCardIds,
+      options
+    );
   }
 
   const dragDistance =
@@ -127,7 +134,8 @@ export function finalizeCardDragLayout(
 
   return {
     cards: finalCards,
-    draggedCard: finalCards.find((candidate) => candidate.id === cardId) ?? draggedCard,
+    draggedCard:
+      finalCards.find((candidate) => candidate.id === cardId) ?? draggedCard,
   };
 }
 
@@ -138,9 +146,15 @@ export function resizeCardWithMindMapNormalization(
 ): CardLayoutUpdateResult {
   const nextCards = cards.map((currentCard) => {
     if (currentCard.id !== cardId) return currentCard;
-    return { ...currentCard, width: dimensions.width, height: dimensions.height };
+    return {
+      ...currentCard,
+      width: dimensions.width,
+      height: dimensions.height,
+    };
   });
-  const resizedCard = nextCards.find((currentCard) => currentCard.id === cardId);
+  const resizedCard = nextCards.find(
+    (currentCard) => currentCard.id === cardId
+  );
   const parentCard =
     resizedCard?.parent === undefined
       ? undefined
