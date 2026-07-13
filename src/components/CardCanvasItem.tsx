@@ -660,6 +660,8 @@ export function CardCanvasItem({
     if (sourceCard !== undefined) {
       onLinkClickRef.current?.(targetCard, sourceCard);
     }
+    // 点击链接按钮时，选中链接指向的目标卡片
+    onSelectRef.current?.(targetCard.id);
   };
 
   const handleLinkButtonPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -681,6 +683,8 @@ export function CardCanvasItem({
       if (sourceCard !== undefined) {
         onLinkClickRef.current?.(targetCard, sourceCard);
       }
+      // 键盘触发链接按钮时，同样选中目标卡片
+      onSelectRef.current?.(targetCard.id);
     }
   };
 

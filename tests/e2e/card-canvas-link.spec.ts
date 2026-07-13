@@ -173,6 +173,33 @@ test.describe('CardCanvas link mode', () => {
     await expect(page.locator('[data-card-link-callback-result]')).toContainText(
       'Target: Alpha'
     );
+
+    // And: the link target card becomes selected.
+    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+    await expect(page.locator('[data-card-id="card-1"]')).toHaveClass(
+      /cards-card-canvas__card--selected/
+    );
+  });
+
+  test('selects the link target card when its footer link is clicked', async ({ page }) => {
+    // Given: two linked cards and card-1 is initially selected.
+    await createLinkedPair(page);
+    await page.locator(`${cardLocatorSelector('card-1')} .cards-card-canvas__card-content`).click();
+    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+
+    // When: clicking the source card's footer link that points to card-2.
+    await page
+      .locator('[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]')
+      .click();
+
+    // Then: card-2 becomes the selected card.
+    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-2');
+    await expect(page.locator('[data-card-id="card-2"]')).toHaveClass(
+      /cards-card-canvas__card--selected/
+    );
+    await expect(page.locator('[data-card-id="card-1"]')).not.toHaveClass(
+      /cards-card-canvas__card--selected/
+    );
   });
 
   test('draws one non-interactive dashed connector from center to center and updates after resize', async ({ page }) => {
@@ -303,7 +330,7 @@ test.describe('CardCanvas link mode', () => {
     await expect(page.locator('[data-card-link-connector]')).toHaveCount(0);
   });
 
-  test('leaves linked footer clicks as a no-op when onLinkClick is absent', async ({ page }) => {
+  test('selects the linked target card on footer click even when onLinkClick is absent', async ({ page }) => {
     // Given: the demo mounts CardCanvas without the optional onLinkClick prop.
     await createLinkedPair(page);
     await disableOption(page, '[data-card-link-callback-enabled-toggle]');
@@ -311,19 +338,21 @@ test.describe('CardCanvas link mode', () => {
     const callbackResultBefore = await page
       .locator('[data-card-link-callback-result]')
       .innerText();
-    const selectedBefore = await page.locator('[data-card-selected-display]').innerText();
 
     // When: a footer button is clicked without an onLinkClick prop.
     await page
       .locator('[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]')
       .click();
 
-    // Then: no exception, selection, or movement occurs.
+    // Then: the link target card becomes selected, callback and geometry stay unchanged.
     const afterBox = await getRequiredBox(page.locator(cardLocatorSelector('card-1')));
     await expect(page.locator('[data-card-link-callback-result]')).toHaveText(
       callbackResultBefore
     );
-    await expect(page.locator('[data-card-selected-display]')).toHaveText(selectedBefore);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-2');
+    await expect(page.locator('[data-card-id="card-2"]')).toHaveClass(
+      /cards-card-canvas__card--selected/
+    );
     expect(afterBox.x).toBeCloseTo(beforeBox.x, 5);
     expect(afterBox.y).toBeCloseTo(beforeBox.y, 5);
   });
