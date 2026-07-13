@@ -1,0 +1,100 @@
+.cards-card-canvas__wrapper {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  position: relative;
+}
+
+.cards-card-canvas__container {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  position: relative;
+}
+
+.cards-card-canvas__card {
+  position: absolute;
+  background-color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Prevent text selection during drag */
+  user-select: none;
+  transition:
+    border-color 0.2s ease,
+    outline-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.cards-card-canvas__card--selected {
+  outline: 2px solid rgba(59, 130, 246, 0.6);
+  outline-offset: 2px;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0 0 0 4px rgba(59, 130, 246, 0.15);
+}
+
+.cards-card-canvas__card--parent-candidate {
+  outline: 2px dashed rgba(16, 185, 129, 0.6);
+  outline-offset: 2px;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0 0 0 4px rgba(16, 185, 129, 0.15);
+}
+
+.cards-card-canvas__card-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  font-weight: 500;
+  font-size: 14px;
+  background-color: #f9fafb;
+  cursor: default;
+}
+
+.cards-card-canvas__card-content {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 12px;
+  flex: 1;
+  overflow: auto;
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  color: #374151;
+  /* 允许长单词/URL 在卡片宽度边界处按单词边界换行，避免撑出卡片 */
+  word-wrap: break-word;
+}
+
+.cards-card-canvas__resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  cursor: se-resize;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Add a subtle visual indicator for the resize handle */
+.cards-card-canvas__resize-handle::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid rgba(0, 0, 0, 0.2);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.2);
+}
+
+.cards-card-canvas__resize-handle--hidden {
+  display: none;
+}
