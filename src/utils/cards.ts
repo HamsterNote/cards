@@ -233,17 +233,21 @@ export function assignParentFromPoint(
   // 否则子卡片会被父卡片的背景遮挡。
   const parentCard = cards.find((card) => card.id === candidateId);
   const parentZIndex = parentCard?.zIndex ?? 0;
-  const draggedZIndex = currentDraggedCard.zIndex ?? 0;
-  // 计算需要提升的 z-index 增量：当子卡片 z-index 不高于父卡片时，将整个子树
-  // 整体平移，使其最低层（拖拽卡片自身）刚好高于父卡片，同时保持子树内部相对层级不变。
-  const zIndexDelta =
-    draggedZIndex <= parentZIndex ? parentZIndex + 1 - draggedZIndex : 0;
-
   // 收集拖拽卡片的所有后代 id（包括自身），需要同步平移 z-index
   const subtreeIds = new Set<string>([
     draggedCardId,
     ...getDescendantIds(cards, draggedCardId),
   ]);
+  const minimumSubtreeZIndex = cards.reduce(
+    (minimum, card) =>
+      subtreeIds.has(card.id) ? Math.min(minimum, card.zIndex ?? 0) : minimum,
+    currentDraggedCard.zIndex ?? 0
+  );
+  // 按子树最低层计算统一增量，既保证全部后代高于新父卡，又保持内部相对层级。
+  const zIndexDelta =
+    minimumSubtreeZIndex <= parentZIndex
+      ? parentZIndex + 1 - minimumSubtreeZIndex
+      : 0;
 
   const nextCards = cards.map((card) => {
     if (!subtreeIds.has(card.id)) return card;

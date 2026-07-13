@@ -27,6 +27,7 @@ export default defineConfig({
   webServer: {
     command: 'yarn dev',
     url: 'http://127.0.0.1:9901',
-    reuseExistingServer: !process.env.CI,
+    // 不复用未知的本地进程，避免多 worktree 并行开发时测试到其他分支的页面。
+    reuseExistingServer: false,
   },
 });
