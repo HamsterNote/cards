@@ -128,9 +128,9 @@ export function reorderArrangeChild(
   // 用指针的 flow key 与兄弟卡片的 flow key 比较，定位插入位置
   const pointerFlowKey = pointerPoint.y * 100000 + pointerPoint.x;
   let insertionIndex = otherIds.length;
-  for (let i = 0; i < otherIds.length; i++) {
-    if (pointerFlowKey < flowKey(otherIds[i]!)) {
-      insertionIndex = i;
+  for (const [index, siblingId] of otherIds.entries()) {
+    if (pointerFlowKey < flowKey(siblingId)) {
+      insertionIndex = index;
       break;
     }
   }
@@ -152,14 +152,15 @@ export function reorderArrangeChild(
 
   // 将新顺序的 sibling 填回这些数组位置
   const nextCards = [...cards];
-  for (
-    let i = 0;
-    i < newSiblingIds.length && i < siblingArrayIndices.length;
-    i++
-  ) {
-    const cardToPlace = cardById.get(newSiblingIds[i]!);
+  for (const [index, siblingId] of newSiblingIds.entries()) {
+    const siblingArrayIndex = siblingArrayIndices[index];
+    if (siblingArrayIndex === undefined) {
+      break;
+    }
+
+    const cardToPlace = cardById.get(siblingId);
     if (cardToPlace !== undefined) {
-      nextCards[siblingArrayIndices[i]!] = cardToPlace;
+      nextCards[siblingArrayIndex] = cardToPlace;
     }
   }
 
