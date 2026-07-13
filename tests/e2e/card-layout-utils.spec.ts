@@ -359,6 +359,70 @@ test.describe('normalizeMindMapLayout — arrange mode', () => {
     expect(result.find((c) => c.id === 'c1')).toMatchObject({ x: 13, y: 50 });
   });
 
+  test('uses a nested arrange child final size when placing its next sibling', () => {
+    // Given: the first child expands vertically while arranging its own children.
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        width: 300,
+        height: 120,
+        childrenLayoutMode: 'arrange',
+      },
+      {
+        ...makeCard('nested', 'root'),
+        width: 120,
+        height: 80,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('sibling', 'root'), width: 120, height: 80 },
+      { ...makeCard('nested-child', 'nested'), width: 120, height: 160 },
+    ]);
+
+    // When: both arrange levels are normalized.
+    const result = normalizeMindMapLayout(cards);
+
+    // Then: the sibling wraps below the expanded nested card instead of overlapping it.
+    expect(result.find((card) => card.id === 'nested')).toMatchObject({
+      x: 13,
+      y: 50,
+      height: 223,
+    });
+    expect(result.find((card) => card.id === 'sibling')).toMatchObject({
+      x: 13,
+      y: 285,
+    });
+  });
+
+  test('wraps a nested arrange child after its own layout expands its width', () => {
+    // Given: a preceding sibling leaves enough room for the nested card's stale width only.
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        width: 400,
+        height: 120,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('first', 'root'), width: 120, height: 80 },
+      {
+        ...makeCard('nested', 'root'),
+        width: 120,
+        height: 80,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('nested-child', 'nested'), width: 300, height: 80 },
+    ]);
+
+    // When: nested layout expands the second child's width during normalization.
+    const result = normalizeMindMapLayout(cards);
+
+    // Then: the expanded child wraps in the same pass and stays inside root content bounds.
+    expect(result.find((card) => card.id === 'nested')).toMatchObject({
+      x: 13,
+      y: 142,
+      width: 326,
+    });
+  });
+
   test('leaves free-mode and empty collections unchanged', () => {
     // Given: no cards and a free-mode hierarchy (explicit 'free' to test non-default mode).
     const freeCards = freezeCards([

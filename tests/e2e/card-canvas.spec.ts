@@ -1,4 +1,5 @@
-import { test, expect, type Locator, type Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 type DragDelta = {
   readonly x: number;
@@ -63,6 +64,36 @@ async function addCardWithParent(
   await page.getByRole('button', { name: 'Add Card' }).click();
   await expect(page.locator('[data-card-id]')).toHaveCount(cardCount + 1);
   await page.locator('[data-card-parent-input]').fill('');
+}
+
+async function setFreeChildrenLayout(page: Page, cardIds: readonly string[]) {
+  await page.evaluate((ids) => {
+    const dataElement = document.querySelector('[data-card-data-content]');
+    if (dataElement === null) {
+      throw new Error('Expected Current Cards Data element');
+    }
+    const cards: unknown = JSON.parse(dataElement.textContent ?? '');
+    if (!Array.isArray(cards)) {
+      throw new Error('Expected Current Cards Data array');
+    }
+    const freeParentIds = new Set(ids);
+    window.dispatchEvent(
+      new CustomEvent('card-canvas-demo:set-cards', {
+        detail: cards.map((card: unknown) => {
+          if (
+            typeof card !== 'object' ||
+            card === null ||
+            !('id' in card) ||
+            typeof card.id !== 'string' ||
+            !freeParentIds.has(card.id)
+          ) {
+            return card;
+          }
+          return { ...card, childrenLayoutMode: 'free' };
+        }),
+      })
+    );
+  }, cardIds);
 }
 
 // Helper to locate the first card and its parts.
@@ -164,6 +195,7 @@ async function createPositionedHierarchy(page: Page): Promise<HierarchyCardIds> 
   const grandchildId = `card-${firstNewCardIndex + 2}`;
 
   await addCard(page, 'Card A', 'Content A');
+  await setFreeChildrenLayout(page, [parentId]);
   await dragLocatorBy(
     page,
     page.locator(`[data-card-id="${parentId}"] .cards-card-canvas__card-header`),
@@ -171,6 +203,7 @@ async function createPositionedHierarchy(page: Page): Promise<HierarchyCardIds> 
   );
 
   await addCardWithParent(page, parentId, 'Card B', 'Content B');
+  await setFreeChildrenLayout(page, [parentId, childId]);
   const parentCard = page.locator(`[data-card-id="${parentId}"]`);
   const parentBox = await getRequiredBox(parentCard);
   const childCard = page.locator(`[data-card-id="${childId}"]`);
@@ -1006,6 +1039,7 @@ test.describe('CardCanvas interactions', () => {
 
   test('overlapping candidates choose highest zIndex then later array order', async ({ page }) => {
     await addCard(page, 'Card 2', 'Content');
+    await setFreeChildrenLayout(page, ['card-1', 'card-2']);
 
     const card1 = page.locator('[data-card-id="card-1"]');
     const card2 = page.locator('[data-card-id="card-2"]');
@@ -1033,6 +1067,7 @@ test.describe('CardCanvas interactions', () => {
 
   test('attach parent: drag B center into A and release writes B parent', async ({ page }) => {
     await addCard(page, 'Card B', 'Content B');
+    await setFreeChildrenLayout(page, ['card-1']);
 
     const cardA = page.locator('[data-card-id="card-1"]');
     const cardB = page.locator('[data-card-id="card-2"]');
@@ -1070,8 +1105,10 @@ test.describe('CardCanvas interactions', () => {
   });
 
   test('re-parent: drag B from A into C updates B parent to C', async ({ page }) => {
+    await setFreeChildrenLayout(page, ['card-1']);
     await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
     await addCard(page, 'Card C', 'Content C');
+    await setFreeChildrenLayout(page, ['card-1', 'card-3']);
 
     const cardB = page.locator('[data-card-id="card-2"]');
     const headerB = cardB.locator('.cards-card-canvas__card-header');
@@ -1111,6 +1148,7 @@ test.describe('CardCanvas interactions', () => {
 
   test('attach parent: overlapping candidates choose zIndex winner on release', async ({ page }) => {
     await addCard(page, 'Card 2', 'Content');
+    await setFreeChildrenLayout(page, ['card-1', 'card-2']);
 
     const card1 = page.locator('[data-card-id="card-1"]');
     const card2 = page.locator('[data-card-id="card-2"]');
@@ -1199,6 +1237,52 @@ test.describe('CardCanvas interactions', () => {
     const cardBoxAfter = expectNotNull(await card.boundingBox());
     expect(cardBoxAfter.x).toBeCloseTo(cardBoxBefore.x + 60, -1);
     expect(cardBoxAfter.y).toBeCloseTo(cardBoxBefore.y + 40, -1);
+  });
+});
+
+test.describe('CardCanvas automatic arrange normalization', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  test('publishes parent size changes when child coordinates are already normalized', async ({
+    page,
+  }) => {
+    // Given: arranged coordinates are canonical, but the parent is too narrow for its child.
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            {
+              id: 'parent',
+              title: 'Parent',
+              content: 'Parent content',
+              x: 0,
+              y: 0,
+              width: 180,
+              height: 143,
+              childrenLayoutMode: 'arrange',
+            },
+            {
+              id: 'child',
+              parent: 'parent',
+              title: 'Child',
+              content: 'Child content',
+              x: 13,
+              y: 50,
+              width: 160,
+              height: 80,
+            },
+          ],
+        })
+      );
+    });
+
+    // When: CardCanvas runs its automatic normalization effect.
+    const cards = await getCardData(page);
+
+    // Then: the normalized parent width is emitted even though no coordinates changed.
+    expect(getCardDataById(cards, 'parent').width).toBe(186);
   });
 });
 

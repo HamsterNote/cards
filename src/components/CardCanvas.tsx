@@ -101,7 +101,7 @@ interface LinkDragInfo {
   readonly targetCardId: string | undefined;
 }
 
-function hasCardCoordinateChanges(
+function hasCardGeometryChanges(
   currentCards: readonly CardCanvasCard[],
   nextCards: readonly CardCanvasCard[]
 ): boolean {
@@ -115,7 +115,9 @@ function hasCardCoordinateChanges(
       nextCard === undefined ||
       card.id !== nextCard.id ||
       card.x !== nextCard.x ||
-      card.y !== nextCard.y
+      card.y !== nextCard.y ||
+      card.width !== nextCard.width ||
+      card.height !== nextCard.height
     );
   });
 }
@@ -188,7 +190,7 @@ export function CardCanvas({
 
   useEffect(() => {
     const normalizedCards = normalizeMindMapLayout(cards);
-    if (hasCardCoordinateChanges(cards, normalizedCards)) {
+    if (hasCardGeometryChanges(cards, normalizedCards)) {
       onCardsChangeRef.current?.(normalizedCards);
     }
   }, [cards]);

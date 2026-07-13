@@ -275,8 +275,22 @@ function normalizeArrangeParentLayout(
       }
     }
 
-    cursorX += child.width + ARRANGE_HORIZONTAL_GAP;
-    rowMaxHeight = Math.max(rowMaxHeight, child.height);
+    let normalizedChild = context.cardById.get(childId) ?? child;
+    if (
+      cursorX + normalizedChild.width > contentRight &&
+      cursorX > contentLeft
+    ) {
+      cursorX = contentLeft;
+      cursorY += rowMaxHeight + ARRANGE_VERTICAL_GAP;
+      rowMaxHeight = 0;
+      moveCardTree(context, childId, {
+        x: cursorX - normalizedChild.x,
+        y: cursorY - normalizedChild.y,
+      });
+      normalizedChild = context.cardById.get(childId) ?? normalizedChild;
+    }
+    cursorX += normalizedChild.width + ARRANGE_HORIZONTAL_GAP;
+    rowMaxHeight = Math.max(rowMaxHeight, normalizedChild.height);
     if (cursorY + rowMaxHeight > maxBottom) {
       maxBottom = cursorY + rowMaxHeight;
     }
