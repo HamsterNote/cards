@@ -1,12 +1,12 @@
-import type { MutableRefObject, ReactNode } from 'react';
-import { useEffect, useRef } from 'react';
 import {
   Drag,
   DragOperationType,
-  FingerOperationType,
   type Finger,
+  FingerOperationType,
   type Pose,
 } from '@system-ui-js/multi-drag';
+import type { MutableRefObject, ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
 import type { CardCanvasCard, CardCanvasOptions } from './CardCanvas';
 import type { CardDragPositionSnapshot, ContentInset } from '../utils/cards';
 import {
@@ -468,14 +468,12 @@ export function CardCanvasItem({
 
     drag.addEventListener(DragOperationType.Start, onStart);
     drag.addEventListener(DragOperationType.Move, onMove);
-    drag.addEventListener(DragOperationType.End, onEnd);
     drag.addEventListener(DragOperationType.AllEnd, onEnd);
 
     return () => {
       document.removeEventListener('pointermove', trackLinkPointer, true);
       drag.removeEventListener(DragOperationType.Start, onStart);
       drag.removeEventListener(DragOperationType.Move, onMove);
-      drag.removeEventListener(DragOperationType.End, onEnd);
       drag.removeEventListener(DragOperationType.AllEnd, onEnd);
       drag.destroy();
       dragRef.current = null;
@@ -575,7 +573,6 @@ export function CardCanvasItem({
 
     dragHandle.addEventListener(DragOperationType.Start, handleStart);
     dragHandle.addEventListener(DragOperationType.Move, handleMove);
-    dragHandle.addEventListener(DragOperationType.End, finishResizeMode);
     dragHandle.addEventListener(DragOperationType.AllEnd, finishResizeMode);
 
     return () => {
@@ -584,7 +581,6 @@ export function CardCanvasItem({
       document.removeEventListener('pointercancel', finishResizeMode, true);
       dragHandle.removeEventListener(DragOperationType.Start, handleStart);
       dragHandle.removeEventListener(DragOperationType.Move, handleMove);
-      dragHandle.removeEventListener(DragOperationType.End, finishResizeMode);
       dragHandle.removeEventListener(
         DragOperationType.AllEnd,
         finishResizeMode
@@ -648,7 +644,7 @@ export function CardCanvasItem({
         }
         const start = pointerDownRef.current;
         pointerDownRef.current = null;
-        if (optionsRef.current.requireSelectionToMoveResize && start) {
+        if (start) {
           const dx = e.clientX - start.x;
           const dy = e.clientY - start.y;
           if (

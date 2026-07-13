@@ -10,8 +10,12 @@
     ".": {
       "import": "./dist/index.es.js",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./styles.css": "./dist/cards.css"
   },
+  "sideEffects": [
+    "**/*.css"
+  ],
   "files": [
     "dist"
   ],

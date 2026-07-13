@@ -769,6 +769,23 @@ test.describe('CardCanvas custom rendering and options', () => {
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       'card-1'
     );
+    await expect(page.locator('[data-card-select-count]')).toHaveText('1');
+  });
+
+  test('does not select a moved card when selectOnMoveEnd is disabled', async ({
+    page,
+  }) => {
+    // Given: neither card creation nor drag completion is configured to select.
+    await disableOption(page, '[data-card-select-new-card-toggle]');
+    await addCard(page, 'Card A', 'Content A');
+
+    const { card, header } = getCardParts(page);
+
+    await dragLocatorBy(page, header, { x: 80, y: 40 });
+
+    await expect(card).not.toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+    await expect(page.locator('[data-card-select-count]')).toHaveText('0');
   });
 
   test('does not select a card when resizing ends and selectOnMoveEnd is enabled', async ({
