@@ -73,7 +73,9 @@ export function CardCanvas({
   renderCardTitle,
   renderCardContent,
 }: CardCanvasProps) {
-  const [parentCandidateId, setParentCandidateId] = useState<string | undefined>();
+  const [parentCandidateId, setParentCandidateId] = useState<
+    string | undefined
+  >();
 
   const normalizedOptions: Required<CardCanvasOptions> = {
     requireSelectionToMoveResize: options.requireSelectionToMoveResize ?? false,

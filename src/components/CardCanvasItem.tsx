@@ -1,13 +1,12 @@
-import type { MutableRefObject, ReactNode } from 'react';
-import { useEffect, useRef } from 'react';
 import {
   Drag,
   DragOperationType,
-  FingerOperationType,
   type Finger,
+  FingerOperationType,
   type Pose,
 } from '@system-ui-js/multi-drag';
-import type { CardCanvasCard, CardCanvasOptions } from './CardCanvas';
+import type { MutableRefObject, ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
 import type { CardDragPositionSnapshot } from '../utils/cards';
 import {
   assignParentFromPoint,
@@ -15,6 +14,7 @@ import {
   findParentCandidateId,
   moveCardsFromSnapshot,
 } from '../utils/cards';
+import type { CardCanvasCard, CardCanvasOptions } from './CardCanvas';
 
 export interface CardCanvasItemProps {
   readonly card: CardCanvasCard;
@@ -54,7 +54,9 @@ export function CardCanvasItem({
   const cardPropRef = useRef(card);
   const optionsRef = useRef(options);
   const onSelectRef = useRef(onSelect);
-  const canMoveOrResize = options.requireSelectionToMoveResize ? isSelected : true;
+  const canMoveOrResize = options.requireSelectionToMoveResize
+    ? isSelected
+    : true;
   const canMoveOrResizeRef = useRef(canMoveOrResize);
 
   useEffect(() => {
@@ -109,7 +111,10 @@ export function CardCanvasItem({
       if (isResizingRef.current || !canMoveOrResizeRef.current) return;
 
       const cardId = cardPropRef.current.id;
-      dragPositionSnapshot = createDragPositionSnapshot(cardsRef.current, cardId);
+      dragPositionSnapshot = createDragPositionSnapshot(
+        cardsRef.current,
+        cardId
+      );
     };
 
     const onMove = (fingers: Finger[]) => {
@@ -197,13 +202,11 @@ export function CardCanvasItem({
 
     drag.addEventListener(DragOperationType.Start, onStart);
     drag.addEventListener(DragOperationType.Move, onMove);
-    drag.addEventListener(DragOperationType.End, onEnd);
     drag.addEventListener(DragOperationType.AllEnd, onEnd);
 
     return () => {
       drag.removeEventListener(DragOperationType.Start, onStart);
       drag.removeEventListener(DragOperationType.Move, onMove);
-      drag.removeEventListener(DragOperationType.End, onEnd);
       drag.removeEventListener(DragOperationType.AllEnd, onEnd);
       drag.destroy();
       dragRef.current = null;
@@ -271,7 +274,11 @@ export function CardCanvasItem({
 
       const nextCards = cardsRef.current.map((currentCard) => {
         if (currentCard.id !== cardId) return currentCard;
-        const nextCard = { ...currentCard, width: nextWidth, height: nextHeight };
+        const nextCard = {
+          ...currentCard,
+          width: nextWidth,
+          height: nextHeight,
+        };
         cardPropRef.current = nextCard;
         return nextCard;
       });
@@ -281,7 +288,6 @@ export function CardCanvasItem({
 
     dragHandle.addEventListener(DragOperationType.Start, handleStart);
     dragHandle.addEventListener(DragOperationType.Move, handleMove);
-    dragHandle.addEventListener(DragOperationType.End, finishResizeMode);
     dragHandle.addEventListener(DragOperationType.AllEnd, finishResizeMode);
 
     return () => {
@@ -290,17 +296,25 @@ export function CardCanvasItem({
       document.removeEventListener('pointercancel', finishResizeMode, true);
       dragHandle.removeEventListener(DragOperationType.Start, handleStart);
       dragHandle.removeEventListener(DragOperationType.Move, handleMove);
-      dragHandle.removeEventListener(DragOperationType.End, finishResizeMode);
-      dragHandle.removeEventListener(DragOperationType.AllEnd, finishResizeMode);
+      dragHandle.removeEventListener(
+        DragOperationType.AllEnd,
+        finishResizeMode
+      );
       dragHandle.destroy();
       resizeDragRef.current = null;
     };
   }, [cardsRef, onCardsChangeRef, setParentCandidateId]);
 
   const contentRef = useRef<HTMLDivElement>(null);
-  const contentPointerDownRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
+  const contentPointerDownRef = useRef<{
+    readonly x: number;
+    readonly y: number;
+  } | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
-  const headerPointerDownRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
+  const headerPointerDownRef = useRef<{
+    readonly x: number;
+    readonly y: number;
+  } | null>(null);
 
   // Bind the content and header click listeners natively so these divs are not flagged
   // as interactive elements by static a11y lint, while preserving mouse-only card selection.
@@ -311,7 +325,10 @@ export function CardCanvasItem({
 
     const bindClickSelect = (
       element: HTMLElement,
-      pointerDownRef: MutableRefObject<{ readonly x: number; readonly y: number } | null>
+      pointerDownRef: MutableRefObject<{
+        readonly x: number;
+        readonly y: number;
+      } | null>
     ) => {
       const handlePointerDown = (e: PointerEvent) => {
         if (e.button !== 0) {
@@ -328,10 +345,13 @@ export function CardCanvasItem({
       const handleClick = (e: MouseEvent) => {
         const start = pointerDownRef.current;
         pointerDownRef.current = null;
-        if (optionsRef.current.requireSelectionToMoveResize && start) {
+        if (start) {
           const dx = e.clientX - start.x;
           const dy = e.clientY - start.y;
-          if (dx * dx + dy * dy >= CONTENT_CLICK_MOVE_THRESHOLD_PX * CONTENT_CLICK_MOVE_THRESHOLD_PX) {
+          if (
+            dx * dx + dy * dy >=
+            CONTENT_CLICK_MOVE_THRESHOLD_PX * CONTENT_CLICK_MOVE_THRESHOLD_PX
+          ) {
             return;
           }
         }
@@ -349,9 +369,15 @@ export function CardCanvasItem({
     };
 
     const cleanups: Array<() => void> = [];
-    if (contentEl) cleanups.push(bindClickSelect(contentEl, contentPointerDownRef));
-    if (headerEl) cleanups.push(bindClickSelect(headerEl, headerPointerDownRef));
-    return () => { cleanups.forEach((cleanup) => { cleanup(); }); };
+    if (contentEl)
+      cleanups.push(bindClickSelect(contentEl, contentPointerDownRef));
+    if (headerEl)
+      cleanups.push(bindClickSelect(headerEl, headerPointerDownRef));
+    return () => {
+      cleanups.forEach((cleanup) => {
+        cleanup();
+      });
+    };
   }, [card.id, onSelect]);
 
   return (
@@ -370,7 +396,11 @@ export function CardCanvasItem({
         zIndex: card.zIndex,
       }}
     >
-      <div ref={headerRef} className="cards-card-canvas__card-header" style={card.titleStyle}>
+      <div
+        ref={headerRef}
+        className="cards-card-canvas__card-header"
+        style={card.titleStyle}
+      >
         {renderCardTitle ? renderCardTitle(card.title) : card.title}
       </div>
       <div

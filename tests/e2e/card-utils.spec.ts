@@ -234,7 +234,13 @@ test.describe('findParentCandidateId utility', () => {
   test('returns the containing card id for a simple valid parent candidate', () => {
     // Given: a dragged card center inside a separate parent card.
     const dragged = { ...makeCard('dragged'), x: 200, y: 200 };
-    const parent = { ...makeCard('parent'), x: 0, y: 0, width: 100, height: 100 };
+    const parent = {
+      ...makeCard('parent'),
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    };
 
     // When: candidate lookup runs for a point inside the parent bounds.
     const result = findParentCandidateId([dragged, parent], 'dragged', {
@@ -248,7 +254,13 @@ test.describe('findParentCandidateId utility', () => {
 
   test('excludes the dragged card itself', () => {
     // Given: the dragged card contains its own center point.
-    const dragged = { ...makeCard('dragged'), x: 0, y: 0, width: 100, height: 100 };
+    const dragged = {
+      ...makeCard('dragged'),
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    };
 
     // When: candidate lookup runs for a point inside the dragged card.
     const result = findParentCandidateId([dragged], 'dragged', {
@@ -263,7 +275,13 @@ test.describe('findParentCandidateId utility', () => {
   test('excludes recursive descendants to prevent cycles', () => {
     // Given: child is already a descendant of root.
     const root = { ...makeCard('root'), x: 200, y: 200 };
-    const child = { ...makeCard('child', 'root'), x: 0, y: 0, width: 100, height: 100 };
+    const child = {
+      ...makeCard('child', 'root'),
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    };
     const grandchild = makeCard('grandchild', 'child');
 
     // When: root is dragged over its child.

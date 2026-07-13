@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Button, CardCanvas, deleteCards } from '../index';
 import type { CardCanvasCard } from '../index';
+import { Button, CardCanvas, deleteCards } from '../index';
 
 export function Demo() {
   const [cards, setCards] = useState<CardCanvasCard[]>([]);
@@ -11,7 +11,8 @@ export function Demo() {
   const [newCardTitleBg, setNewCardTitleBg] = useState('#f9fafb');
   const [newCardContentBg, setNewCardContentBg] = useState('#ffffff');
   const [newCardParent, setNewCardParent] = useState('');
-  const [requireSelectionToMoveResize, setRequireSelectionToMoveResize] = useState(false);
+  const [requireSelectionToMoveResize, setRequireSelectionToMoveResize] =
+    useState(false);
   const [selectOnMoveEnd, setSelectOnMoveEnd] = useState(false);
 
   const handleAddCard = () => {
@@ -53,15 +54,21 @@ export function Demo() {
   const handleDeleteSelected = async () => {
     if (selected.length === 0) return;
 
-    const newCards = await deleteCards(cards, selected, async (_cards, _deleteIds, meta) => {
-      if (meta.hasChildren) {
-        return window.confirm("Delete this card and its child cards?");
+    const newCards = await deleteCards(
+      cards,
+      selected,
+      async (_cards, _deleteIds, meta) => {
+        if (meta.hasChildren) {
+          return window.confirm('Delete this card and its child cards?');
+        }
+        return true;
       }
-      return true;
-    });
+    );
 
     setCards(newCards);
-    setSelected((prev) => prev.filter((id) => newCards.some((card) => card.id === id)));
+    setSelected((prev) =>
+      prev.filter((id) => newCards.some((card) => card.id === id))
+    );
   };
 
   return (
@@ -137,7 +144,9 @@ export function Demo() {
                   type="checkbox"
                   data-card-require-selection-toggle
                   checked={requireSelectionToMoveResize}
-                  onChange={(e) => setRequireSelectionToMoveResize(e.target.checked)}
+                  onChange={(e) =>
+                    setRequireSelectionToMoveResize(e.target.checked)
+                  }
                 />
                 Require selection before move/resize
               </label>
@@ -181,8 +190,12 @@ export function Demo() {
                 onClearSelection={handleClearSelection}
                 className="card-canvas-demo-transform"
                 options={{ requireSelectionToMoveResize, selectOnMoveEnd }}
-                renderCardTitle={(title: string) => <span data-card-rendered-title>{title}</span>}
-                renderCardContent={(content: string) => <span data-card-rendered-content>{content}</span>}
+                renderCardTitle={(title: string) => (
+                  <span data-card-rendered-title>{title}</span>
+                )}
+                renderCardContent={(content: string) => (
+                  <span data-card-rendered-content>{content}</span>
+                )}
               />
             </div>
           </div>
