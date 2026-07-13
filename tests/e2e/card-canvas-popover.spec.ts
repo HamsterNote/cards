@@ -169,4 +169,22 @@ test.describe('CardCanvas popover interactions', () => {
     await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
     await expect(page.locator('.cards-card-canvas__popover')).toHaveCount(0);
   });
+
+  test('keeps selection when clicking the demo popover background', async ({
+    page,
+  }) => {
+    // Given: a selected card is showing the Demo popover.
+    await addCard(page, 'Card A', 'Content A');
+    const popoverContent = page.locator('.card-canvas-demo-popover-content');
+    await expect(popoverContent).toBeVisible();
+
+    // When: the user clicks a non-control area inside the popover.
+    await popoverContent.click({ position: { x: 4, y: 4 } });
+
+    // Then: the click stays inside the popover and selection remains active.
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
+    await expect(page.locator('.cards-card-canvas__popover')).toBeVisible();
+  });
 });

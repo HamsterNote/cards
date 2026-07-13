@@ -128,14 +128,20 @@ export async function dragHandleToPoint(
   await page.mouse.up();
 }
 
-export async function enableOption(page: Page, selector: string): Promise<void> {
+export async function enableOption(
+  page: Page,
+  selector: string
+): Promise<void> {
   const option = page.locator(selector);
   await expect(option).toBeVisible();
   await option.check();
   await expect(option).toBeChecked();
 }
 
-export async function disableOption(page: Page, selector: string): Promise<void> {
+export async function disableOption(
+  page: Page,
+  selector: string
+): Promise<void> {
   const option = page.locator(selector);
   await expect(option).toBeVisible();
   await option.uncheck();
@@ -147,7 +153,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isStringArray(value: unknown): value is readonly string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
 }
 
 function isCardChildrenLayoutMode(
@@ -185,7 +193,9 @@ function parseCardData(text: string): CardDataSnapshot[] {
 }
 
 export async function getCardData(page: Page): Promise<CardDataSnapshot[]> {
-  return parseCardData(await page.locator('[data-card-data-content]').innerText());
+  return parseCardData(
+    await page.locator('[data-card-data-content]').innerText()
+  );
 }
 
 export function getCardDataById(
@@ -241,17 +251,25 @@ export async function linkDragHeaderToCard(
   sourceId: string,
   targetId: string
 ): Promise<void> {
-  const sourceHeader = page.locator(`${cardLocatorSelector(sourceId)} .cards-card-canvas__card-header`);
+  const sourceHeader = page.locator(
+    `${cardLocatorSelector(sourceId)} .cards-card-canvas__card-header`
+  );
   await sourceHeader.scrollIntoViewIfNeeded();
-  const targetBox = await getRequiredBox(page.locator(cardLocatorSelector(targetId)));
+  const targetBox = await getRequiredBox(
+    page.locator(cardLocatorSelector(targetId))
+  );
   await dragHandleToPoint(page, sourceHeader, {
     x: targetBox.x + targetBox.width / 2,
     y: targetBox.y + targetBox.height / 2,
   });
 }
 
-export function parseRequiredNumber(value: string | null, label: string): number {
-  if (value === null) throw new Error(`Expected ${label} attribute to be present`);
+export function parseRequiredNumber(
+  value: string | null,
+  label: string
+): number {
+  if (value === null)
+    throw new Error(`Expected ${label} attribute to be present`);
   return Number.parseFloat(value);
 }
 
@@ -289,6 +307,9 @@ export async function expectConnectorMatchesCardCenters(
 
 export async function waitForAnimationFrame(page: Page): Promise<void> {
   await page.evaluate(
-    () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+    () =>
+      new Promise<void>((resolve) =>
+        window.requestAnimationFrame(() => resolve())
+      )
   );
 }

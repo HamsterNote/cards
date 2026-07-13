@@ -121,7 +121,9 @@ async function dragCardCenterOntoCard(
   const draggedCard = page.locator(cardLocatorSelector(draggedCardId));
   const draggedHandle = draggedCard.locator('.cards-card-canvas__card-header');
   await draggedHandle.scrollIntoViewIfNeeded();
-  const targetBox = await getRequiredBox(page.locator(cardLocatorSelector(targetCardId)));
+  const targetBox = await getRequiredBox(
+    page.locator(cardLocatorSelector(targetCardId))
+  );
   await dragCardCenterToPoint(
     page,
     { card: draggedCard, handle: draggedHandle },
@@ -167,7 +169,9 @@ test.describe('CardCanvas mind-map data contract', () => {
     await expect(page.locator('[data-card-id]')).toHaveCount(2);
 
     // When: the demo serializes the current cards data.
-    const serializedCards = await page.locator('[data-card-data-content]').innerText();
+    const serializedCards = await page
+      .locator('[data-card-data-content]')
+      .innerText();
     const cards = await getCardData(page);
     const child = getCardDataById(cards, childCard.id);
 
@@ -208,8 +212,9 @@ test.describe('CardCanvas mind-map data contract', () => {
       'vertical'
     );
 
-    const readInvalidCardData = async (): Promise<readonly CardDataSnapshot[]> =>
-      getCardData(page);
+    const readInvalidCardData = async (): Promise<
+      readonly CardDataSnapshot[]
+    > => getCardData(page);
 
     await expect(readInvalidCardData()).rejects.toThrow(
       /childrenLayoutMode|card snapshots/
@@ -227,24 +232,37 @@ test.describe('CardCanvas mind-map data contract', () => {
     });
 
     // When: the demo receives the replacement and CardCanvas writes back canonical data.
-    const result = await page.evaluate(async (nextCards) => {
-      const dataNode = document.querySelector('[data-card-data-content]');
-      if (dataNode === null) throw new Error('Missing cards data display');
-      const states: string[] = [];
-      const observer = new MutationObserver(() => {
-        states.push(dataNode.textContent ?? '');
-      });
-      observer.observe(dataNode, { childList: true, characterData: true, subtree: true });
-      window.dispatchEvent(
-        new CustomEvent('card-canvas-demo:set-cards', {
-          detail: Object.freeze(nextCards.map((card) => Object.freeze({ ...card }))),
-        })
-      );
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      observer.disconnect();
-      return { states, text: dataNode.textContent ?? '' };
-    }, [mindMapParent, staleChild]);
+    const result = await page.evaluate(
+      async (nextCards) => {
+        const dataNode = document.querySelector('[data-card-data-content]');
+        if (dataNode === null) throw new Error('Missing cards data display');
+        const states: string[] = [];
+        const observer = new MutationObserver(() => {
+          states.push(dataNode.textContent ?? '');
+        });
+        observer.observe(dataNode, {
+          childList: true,
+          characterData: true,
+          subtree: true,
+        });
+        window.dispatchEvent(
+          new CustomEvent('card-canvas-demo:set-cards', {
+            detail: Object.freeze(
+              nextCards.map((card) => Object.freeze({ ...card }))
+            ),
+          })
+        );
+        await new Promise<void>((resolve) =>
+          window.requestAnimationFrame(() => resolve())
+        );
+        await new Promise<void>((resolve) =>
+          window.requestAnimationFrame(() => resolve())
+        );
+        observer.disconnect();
+        return { states, text: dataNode.textContent ?? '' };
+      },
+      [mindMapParent, staleChild]
+    );
 
     // Then: final coordinates are canonical and no repeated write-back loop appears.
     expect(result.states.length).toBeLessThanOrEqual(2);
@@ -252,9 +270,13 @@ test.describe('CardCanvas mind-map data contract', () => {
     const child = getCardDataById(cards, childCard.id);
     expect(child.x).toBeCloseTo(expectedChildX(parentCard), 5);
     expect(child.y).toBeCloseTo(expectedChildY(parentCard, [childCard], 0), 5);
-    const normalizedText = await page.locator('[data-card-data-content]').innerText();
+    const normalizedText = await page
+      .locator('[data-card-data-content]')
+      .innerText();
     await waitForAnimationFrame(page);
-    expect(await page.locator('[data-card-data-content]').innerText()).toBe(normalizedText);
+    expect(await page.locator('[data-card-data-content]').innerText()).toBe(
+      normalizedText
+    );
   });
 
   test('toggles a selected parent to mind-map and back to explicit free', async ({
@@ -268,7 +290,9 @@ test.describe('CardCanvas mind-map data contract', () => {
     await selectCard(page, parentCard.id);
 
     // When: the popover mode control switches to horizontal mind-map.
-    await page.locator('[data-card-children-layout-mode-select]').selectOption('mind-map-horizontal');
+    await page
+      .locator('[data-card-children-layout-mode-select]')
+      .selectOption('mind-map-horizontal');
 
     // Then: mode is persisted and child coordinates are normalized.
     let cards = await getCardData(page);
@@ -279,7 +303,9 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(child.y).toBeCloseTo(expectedChildY(parent, [detachedChild], 0), 5);
 
     // When: the mode switches back to free.
-    await page.locator('[data-card-children-layout-mode-select]').selectOption('free');
+    await page
+      .locator('[data-card-children-layout-mode-select]')
+      .selectOption('free');
 
     // Then: explicit free is written and existing coordinates are not erased.
     cards = await getCardData(page);
@@ -301,7 +327,12 @@ test.describe('CardCanvas mind-map data contract', () => {
     await loadFrozenCards(page, [mindMapParent]);
 
     // When: the Demo Parent ID flow adds a child under that parent.
-    await addCardWithParent(page, parentCard.id, 'Added child', 'Added content');
+    await addCardWithParent(
+      page,
+      parentCard.id,
+      'Added child',
+      'Added content'
+    );
 
     // Then: the new child is parented and immediately canonicalized to the right side.
     const cards = await getCardData(page);
@@ -317,14 +348,16 @@ test.describe('CardCanvas mind-map data contract', () => {
     // Given: a parent card is selected
     await loadFrozenCards(page, [parentCard]);
     await selectCard(page, parentCard.id);
-    await expect(page.locator('[data-card-selected-display]')).toHaveText(parentCard.id);
-    
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      parentCard.id
+    );
+
     const select = page.locator('[data-card-children-layout-mode-select]');
     await expect(select).toBeVisible();
-    
+
     // When: clicking on an empty area of the canvas
     await page.mouse.click(0, 0);
-    
+
     // Then: selection display is cleared
     await expect(page.locator('[data-card-selected-display]')).toHaveText('');
   });
@@ -333,7 +366,10 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a mind-map parent has three direct children.
-    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const parent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
     const first = Object.freeze({ ...childCard, id: 'child-1', height: 80 });
     const second = Object.freeze({ ...childCard, id: 'child-2', height: 100 });
     const third = Object.freeze({ ...childCard, id: 'child-3', height: 120 });
@@ -349,22 +385,63 @@ test.describe('CardCanvas mind-map data contract', () => {
     const secondAfter = getCardDataById(cards, second.id);
     const thirdAfter = getCardDataById(cards, third.id);
     expect(cards.some((card) => card.id === first.id)).toBe(false);
-    expect(secondAfter.y).toBeCloseTo(expectedChildY(parent, [second, third], 0), 5);
-    expect(thirdAfter.y).toBeCloseTo(expectedChildY(parent, [second, third], 1), 5);
+    expect(secondAfter.y).toBeCloseTo(
+      expectedChildY(parent, [second, third], 0),
+      5
+    );
+    expect(thirdAfter.y).toBeCloseTo(
+      expectedChildY(parent, [second, third], 1),
+      5
+    );
   });
 
   test('deleting a nested descendant preserves cascade and reflows ancestors', async ({
     page,
   }) => {
     // Given: a root mind-map has a nested mind-map branch whose subtree affects root spacing.
-    const root = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const branch = Object.freeze({ ...childCard, id: 'branch', height: 80, childrenLayoutMode: 'mind-map-horizontal' as const });
-    // 显式指定 'free' 模式，避免 arrange 将 leaf 排列进 nested 内部导致点击误中 leaf
-    const nested = Object.freeze({ ...childCard, id: 'nested', parent: branch.id, height: 120, childrenLayoutMode: 'free' as const });
-    const nestedSibling = Object.freeze({ ...childCard, id: 'nested-sibling', parent: branch.id, height: 120 });
-    const leaf = Object.freeze({ ...childCard, id: 'leaf', parent: nested.id, height: 60 });
-    const rootSibling = Object.freeze({ ...childCard, id: 'root-sibling', height: 80 });
-    await loadFrozenCards(page, [root, branch, nested, nestedSibling, leaf, rootSibling]);
+    const root = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const branch = Object.freeze({
+      ...childCard,
+      id: 'branch',
+      height: 80,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const nested = Object.freeze({
+      ...childCard,
+      id: 'nested',
+      parent: branch.id,
+      height: 120,
+      // 显式指定 free，避免默认 arrange 将 leaf 排列进 nested 内部。
+      childrenLayoutMode: 'free' as const,
+    });
+    const nestedSibling = Object.freeze({
+      ...childCard,
+      id: 'nested-sibling',
+      parent: branch.id,
+      height: 120,
+    });
+    const leaf = Object.freeze({
+      ...childCard,
+      id: 'leaf',
+      parent: nested.id,
+      height: 60,
+    });
+    const rootSibling = Object.freeze({
+      ...childCard,
+      id: 'root-sibling',
+      height: 80,
+    });
+    await loadFrozenCards(page, [
+      root,
+      branch,
+      nested,
+      nestedSibling,
+      leaf,
+      rootSibling,
+    ]);
     await waitForAnimationFrame(page);
     const before = getCardDataById(await getCardData(page), rootSibling.id);
 
@@ -386,9 +463,20 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a frozen mind-map parent already owns siblings and a separate free card.
-    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const first = Object.freeze({ ...childCard, id: 'first-child', height: 80 });
-    const second = Object.freeze({ ...childCard, id: 'second-child', height: 90 });
+    const parent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const first = Object.freeze({
+      ...childCard,
+      id: 'first-child',
+      height: 80,
+    });
+    const second = Object.freeze({
+      ...childCard,
+      id: 'second-child',
+      height: 90,
+    });
     const free = Object.freeze({
       ...childCard,
       id: 'free-child',
@@ -418,9 +506,18 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(firstAfter.x).toBeCloseTo(expectedChildX(parentAfter), 5);
     expect(secondAfter.x).toBeCloseTo(expectedChildX(parentAfter), 5);
     expect(freeAfter.x).toBeCloseTo(expectedChildX(parentAfter), 5);
-    expect(firstAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second, free], 0), 5);
-    expect(secondAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second, free], 1), 5);
-    expect(freeAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second, free], 2), 5);
+    expect(firstAfter.y).toBeCloseTo(
+      expectedChildY(parentAfter, [first, second, free], 0),
+      5
+    );
+    expect(secondAfter.y).toBeCloseTo(
+      expectedChildY(parentAfter, [first, second, free], 1),
+      5
+    );
+    expect(freeAfter.y).toBeCloseTo(
+      expectedChildY(parentAfter, [first, second, free], 2),
+      5
+    );
     expectNoVerticalOverlap([firstAfter, secondAfter, freeAfter]);
   });
 
@@ -440,16 +537,26 @@ test.describe('CardCanvas mind-map data contract', () => {
       height: 140,
     });
     await loadFrozenCards(page, [freeParent, freeChild]);
-    const parentBefore = getCardDataById(await getCardData(page), freeParent.id);
+    const parentBefore = getCardDataById(
+      await getCardData(page),
+      freeParent.id
+    );
     const child = page.locator(cardLocatorSelector(freeChild.id));
-    await child.locator('.cards-card-canvas__card-header').scrollIntoViewIfNeeded();
-    const parentBox = await getRequiredBox(page.locator(cardLocatorSelector(freeParent.id)));
+    await child
+      .locator('.cards-card-canvas__card-header')
+      .scrollIntoViewIfNeeded();
+    const parentBox = await getRequiredBox(
+      page.locator(cardLocatorSelector(freeParent.id))
+    );
 
     // When: the child center is dropped near the free parent's bottom-right interior.
     await dragCardCenterToPoint(
       page,
       { card: child, handle: child.locator('.cards-card-canvas__card-header') },
-      { x: parentBox.x + parentBox.width - 4, y: parentBox.y + parentBox.height - 4 }
+      {
+        x: parentBox.x + parentBox.width - 4,
+        y: parentBox.y + parentBox.height - 4,
+      }
     );
 
     // Then: the legacy free-mode attach path still expands the parent to contain the child.
@@ -465,9 +572,20 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: two frozen mind-map parents each have direct children.
-    const oldParent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const stayingChild = Object.freeze({ ...childCard, id: 'staying-child', height: 80 });
-    const movingChild = Object.freeze({ ...childCard, id: 'moving-child', height: 110 });
+    const oldParent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const stayingChild = Object.freeze({
+      ...childCard,
+      id: 'staying-child',
+      height: 80,
+    });
+    const movingChild = Object.freeze({
+      ...childCard,
+      id: 'moving-child',
+      height: 110,
+    });
     const newParent = Object.freeze({
       ...parentCard,
       id: 'new-parent',
@@ -482,7 +600,13 @@ test.describe('CardCanvas mind-map data contract', () => {
       parent: newParent.id,
       height: 90,
     });
-    await loadFrozenCards(page, [oldParent, stayingChild, movingChild, newParent, newSibling]);
+    await loadFrozenCards(page, [
+      oldParent,
+      stayingChild,
+      movingChild,
+      newParent,
+      newSibling,
+    ]);
     await waitForAnimationFrame(page);
 
     // When: a child from the old parent is dropped onto the new mind-map parent.
@@ -499,11 +623,20 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(movingAfter.parent).toBe(newParent.id);
     expect(stayingAfter.parent).toBe(oldParent.id);
     expect(stayingAfter.x).toBeCloseTo(expectedChildX(oldParentAfter), 5);
-    expect(stayingAfter.y).toBeCloseTo(expectedChildY(oldParentAfter, [stayingChild], 0), 5);
+    expect(stayingAfter.y).toBeCloseTo(
+      expectedChildY(oldParentAfter, [stayingChild], 0),
+      5
+    );
     expect(movingAfter.x).toBeCloseTo(expectedChildX(newParentAfter), 5);
     expect(newSiblingAfter.x).toBeCloseTo(expectedChildX(newParentAfter), 5);
-    expect(movingAfter.y).toBeCloseTo(expectedChildY(newParentAfter, [movingChild, newSibling], 0), 5);
-    expect(newSiblingAfter.y).toBeCloseTo(expectedChildY(newParentAfter, [movingChild, newSibling], 1), 5);
+    expect(movingAfter.y).toBeCloseTo(
+      expectedChildY(newParentAfter, [movingChild, newSibling], 0),
+      5
+    );
+    expect(newSiblingAfter.y).toBeCloseTo(
+      expectedChildY(newParentAfter, [movingChild, newSibling], 1),
+      5
+    );
     expectNoVerticalOverlap([movingAfter, newSiblingAfter]);
   });
 
@@ -511,9 +644,20 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a mind-map parent owns two managed children in canonical positions.
-    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const movingChild = Object.freeze({ ...childCard, id: 'small-drag-child', height: 90 });
-    const sibling = Object.freeze({ ...childCard, id: 'small-drag-sibling', height: 110 });
+    const parent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const movingChild = Object.freeze({
+      ...childCard,
+      id: 'small-drag-child',
+      height: 90,
+    });
+    const sibling = Object.freeze({
+      ...childCard,
+      id: 'small-drag-sibling',
+      height: 110,
+    });
     await loadFrozenCards(page, [parent, movingChild, sibling]);
     await waitForAnimationFrame(page);
     const beforeCards = await getCardData(page);
@@ -522,7 +666,9 @@ test.describe('CardCanvas mind-map data contract', () => {
     // When: the child moves less than the detach threshold and is released over empty canvas.
     await dragLocatorBy(
       page,
-      page.locator(`${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`),
+      page.locator(
+        `${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`
+      ),
       { x: 20, y: 10 }
     );
     await waitForAnimationFrame(page);
@@ -533,17 +679,34 @@ test.describe('CardCanvas mind-map data contract', () => {
     const siblingAfter = getCardDataById(cards, sibling.id);
     expect(childAfter.parent).toBe(parent.id);
     expect(childAfter.x).toBeCloseTo(expectedChildX(parentBefore), 5);
-    expect(childAfter.y).toBeCloseTo(expectedChildY(parentBefore, [movingChild, sibling], 0), 5);
-    expect(siblingAfter.y).toBeCloseTo(expectedChildY(parentBefore, [movingChild, sibling], 1), 5);
+    expect(childAfter.y).toBeCloseTo(
+      expectedChildY(parentBefore, [movingChild, sibling], 0),
+      5
+    );
+    expect(siblingAfter.y).toBeCloseTo(
+      expectedChildY(parentBefore, [movingChild, sibling], 1),
+      5
+    );
   });
 
   test('detaches a large empty-canvas drag of a managed child and reflows old siblings', async ({
     page,
   }) => {
     // Given: a managed child and a sibling are laid out by a mind-map parent.
-    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const movingChild = Object.freeze({ ...childCard, id: 'large-drag-child', height: 90 });
-    const sibling = Object.freeze({ ...childCard, id: 'large-drag-sibling', height: 110 });
+    const parent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const movingChild = Object.freeze({
+      ...childCard,
+      id: 'large-drag-child',
+      height: 90,
+    });
+    const sibling = Object.freeze({
+      ...childCard,
+      id: 'large-drag-sibling',
+      height: 110,
+    });
     await loadFrozenCards(page, [parent, movingChild, sibling]);
     await waitForAnimationFrame(page);
     const beforeCards = await getCardData(page);
@@ -553,7 +716,9 @@ test.describe('CardCanvas mind-map data contract', () => {
     // When: the child moves past the detach threshold and is released over empty canvas.
     await dragLocatorBy(
       page,
-      page.locator(`${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`),
+      page.locator(
+        `${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`
+      ),
       { x: 80, y: 0 }
     );
     // Poll until the detach and reflow settle – avoids flake from async layout.
@@ -570,7 +735,9 @@ test.describe('CardCanvas mind-map data contract', () => {
             Math.abs(movingAfter.y - movingBefore.y) <= 0.01 &&
             siblingAfter.parent === parent.id &&
             Math.abs(siblingAfter.x - expectedChildX(parentBefore)) <= 0.01 &&
-            Math.abs(siblingAfter.y - expectedChildY(parentBefore, [sibling], 0)) <= 0.01
+            Math.abs(
+              siblingAfter.y - expectedChildY(parentBefore, [sibling], 0)
+            ) <= 0.01
           );
         },
         { timeout: 5000, intervals: [100] }
@@ -582,9 +749,20 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: the new mind-map parent begins just outside the dragged child's start point.
-    const oldParent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const movingChild = Object.freeze({ ...childCard, id: 'threshold-reparent-child', height: 90 });
-    const oldSibling = Object.freeze({ ...childCard, id: 'threshold-old-sibling', height: 100 });
+    const oldParent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const movingChild = Object.freeze({
+      ...childCard,
+      id: 'threshold-reparent-child',
+      height: 90,
+    });
+    const oldSibling = Object.freeze({
+      ...childCard,
+      id: 'threshold-old-sibling',
+      height: 100,
+    });
     const newParent = Object.freeze({
       ...parentCard,
       id: 'threshold-new-parent',
@@ -593,13 +771,20 @@ test.describe('CardCanvas mind-map data contract', () => {
       y: 80,
       childrenLayoutMode: 'mind-map-horizontal' as const,
     });
-    await loadFrozenCards(page, [oldParent, movingChild, oldSibling, newParent]);
+    await loadFrozenCards(page, [
+      oldParent,
+      movingChild,
+      oldSibling,
+      newParent,
+    ]);
     await waitForAnimationFrame(page);
 
     // When: a below-threshold move releases the child over that valid parent candidate.
     await dragLocatorBy(
       page,
-      page.locator(`${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`),
+      page.locator(
+        `${cardLocatorSelector(movingChild.id)} .cards-card-canvas__card-header`
+      ),
       { x: 20, y: 10 }
     );
     await waitForAnimationFrame(page);
@@ -612,23 +797,36 @@ test.describe('CardCanvas mind-map data contract', () => {
     const oldSiblingAfter = getCardDataById(cards, oldSibling.id);
     expect(movingAfter.parent).toBe(newParent.id);
     expect(oldSiblingAfter.parent).toBe(oldParent.id);
-    expect(oldSiblingAfter.y).toBeCloseTo(expectedChildY(oldParentAfter, [oldSibling], 0), 5);
+    expect(oldSiblingAfter.y).toBeCloseTo(
+      expectedChildY(oldParentAfter, [oldSibling], 0),
+      5
+    );
     expect(movingAfter.x).toBeCloseTo(expectedChildX(newParentAfter), 5);
-    expect(movingAfter.y).toBeCloseTo(expectedChildY(newParentAfter, [movingChild], 0), 5);
+    expect(movingAfter.y).toBeCloseTo(
+      expectedChildY(newParentAfter, [movingChild], 0),
+      5
+    );
   });
 
   test('moves a dragged mind-map parent and all descendants by the exact delta', async ({
     page,
   }) => {
     // Given: a root mind-map parent has children and a nested grandchild branch.
-    const root = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
+    const root = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
     const branch = Object.freeze({
       ...childCard,
       id: 'delta-branch',
       height: 90,
       childrenLayoutMode: 'mind-map-horizontal' as const,
     });
-    const rootSibling = Object.freeze({ ...childCard, id: 'delta-root-sibling', height: 100 });
+    const rootSibling = Object.freeze({
+      ...childCard,
+      id: 'delta-root-sibling',
+      height: 100,
+    });
     const grandchild = Object.freeze({
       ...childCard,
       id: 'delta-grandchild',
@@ -643,7 +841,9 @@ test.describe('CardCanvas mind-map data contract', () => {
     const delta = { x: 100, y: 20 };
     await dragLocatorBy(
       page,
-      page.locator(`${cardLocatorSelector(root.id)} .cards-card-canvas__card-header`),
+      page.locator(
+        `${cardLocatorSelector(root.id)} .cards-card-canvas__card-header`
+      ),
       delta
     );
     await waitForAnimationFrame(page);
@@ -663,9 +863,20 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a mind-map parent has two direct children in canonical positions.
-    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const first = Object.freeze({ ...childCard, id: 'resize-width-first', height: 80 });
-    const second = Object.freeze({ ...childCard, id: 'resize-width-second', height: 100 });
+    const parent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const first = Object.freeze({
+      ...childCard,
+      id: 'resize-width-first',
+      height: 80,
+    });
+    const second = Object.freeze({
+      ...childCard,
+      id: 'resize-width-second',
+      height: 100,
+    });
     await loadFrozenCards(page, [parent, first, second]);
     await waitForAnimationFrame(page);
     const beforeCards = await getCardData(page);
@@ -691,9 +902,20 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a mind-map parent has a vertically centered child block.
-    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const first = Object.freeze({ ...childCard, id: 'resize-height-first', height: 80 });
-    const second = Object.freeze({ ...childCard, id: 'resize-height-second', height: 100 });
+    const parent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const first = Object.freeze({
+      ...childCard,
+      id: 'resize-height-first',
+      height: 80,
+    });
+    const second = Object.freeze({
+      ...childCard,
+      id: 'resize-height-second',
+      height: 100,
+    });
     await loadFrozenCards(page, [parent, first, second]);
     await waitForAnimationFrame(page);
 
@@ -707,17 +929,34 @@ test.describe('CardCanvas mind-map data contract', () => {
     const firstAfter = getCardDataById(cards, first.id);
     const secondAfter = getCardDataById(cards, second.id);
     expect(parentAfter.height).toBeCloseTo(parent.height + 40, 5);
-    expect(firstAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second], 0), 5);
-    expect(secondAfter.y).toBeCloseTo(expectedChildY(parentAfter, [first, second], 1), 5);
+    expect(firstAfter.y).toBeCloseTo(
+      expectedChildY(parentAfter, [first, second], 0),
+      5
+    );
+    expect(secondAfter.y).toBeCloseTo(
+      expectedChildY(parentAfter, [first, second], 1),
+      5
+    );
   });
 
   test('reflows following siblings when a direct mind-map child height grows', async ({
     page,
   }) => {
     // Given: a mind-map parent owns two direct children.
-    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const first = Object.freeze({ ...childCard, id: 'resize-child-first', height: 80 });
-    const second = Object.freeze({ ...childCard, id: 'resize-child-second', height: 100 });
+    const parent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const first = Object.freeze({
+      ...childCard,
+      id: 'resize-child-first',
+      height: 80,
+    });
+    const second = Object.freeze({
+      ...childCard,
+      id: 'resize-child-second',
+      height: 100,
+    });
     await loadFrozenCards(page, [parent, first, second]);
     await waitForAnimationFrame(page);
     const beforeSecond = getCardDataById(await getCardData(page), second.id);
@@ -737,8 +976,14 @@ test.describe('CardCanvas mind-map data contract', () => {
     const resizedFirst = { ...first, height: first.height + delta.y * 2 };
     expect(firstAfter.height).toBeCloseTo(resizedFirst.height, 5);
     expect(secondAfter.y).not.toBeCloseTo(beforeSecond.y, 5);
-    expect(firstAfter.y).toBeCloseTo(expectedChildY(parentAfter, [resizedFirst, second], 0), 5);
-    expect(secondAfter.y).toBeCloseTo(expectedChildY(parentAfter, [resizedFirst, second], 1), 5);
+    expect(firstAfter.y).toBeCloseTo(
+      expectedChildY(parentAfter, [resizedFirst, second], 0),
+      5
+    );
+    expect(secondAfter.y).toBeCloseTo(
+      expectedChildY(parentAfter, [resizedFirst, second], 1),
+      5
+    );
   });
 
   test('keeps free-mode child and grandchild positions stable when parent resizes', async ({
@@ -746,8 +991,17 @@ test.describe('CardCanvas mind-map data contract', () => {
   }) => {
     // Given: a free-mode hierarchy uses the legacy resize contract.
     // 显式指定 'free' 模式以测试 free 模式下 resize 不影响后代位置的行为
-    const parent = Object.freeze({ ...parentCard, id: 'free-resize-parent', childrenLayoutMode: 'free' as const });
-    const child = Object.freeze({ ...childCard, id: 'free-resize-child', parent: parent.id, childrenLayoutMode: 'free' as const });
+    const parent = Object.freeze({
+      ...parentCard,
+      id: 'free-resize-parent',
+      childrenLayoutMode: 'free' as const,
+    });
+    const child = Object.freeze({
+      ...childCard,
+      id: 'free-resize-child',
+      parent: parent.id,
+      childrenLayoutMode: 'free' as const,
+    });
     const grandchild = Object.freeze({
       ...childCard,
       id: 'free-resize-grandchild',
@@ -780,8 +1034,15 @@ test.describe('CardCanvas mind-map data contract', () => {
     page,
   }) => {
     // Given: a mind-map parent owns a managed child and link mode is enabled.
-    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const child = Object.freeze({ ...childCard, id: 'link-mode-managed-child', height: 90 });
+    const parent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const child = Object.freeze({
+      ...childCard,
+      id: 'link-mode-managed-child',
+      height: 90,
+    });
     await loadFrozenCards(page, [parent, child]);
     await waitForAnimationFrame(page);
     await enableOption(page, LINK_MODE_SELECTOR);
@@ -803,16 +1064,30 @@ test.describe('CardCanvas mind-map data contract', () => {
     expectCardPositionUnchanged(parentBefore, parentAfter);
     expectCardPositionUnchanged(childBefore, childAfter);
     expect(childAfter.x).toBeCloseTo(expectedChildX(parentAfter), 5);
-    expect(childAfter.y).toBeCloseTo(expectedChildY(parentAfter, [child], 0), 5);
+    expect(childAfter.y).toBeCloseTo(
+      expectedChildY(parentAfter, [child], 0),
+      5
+    );
   });
 
   test('renders Z-shaped hierarchy connectors for mind-map parent-child', async ({
     page,
   }) => {
     // Given: a mind-map parent has two children but no linkedCardIds graph.
-    const parent = Object.freeze({ ...parentCard, childrenLayoutMode: 'mind-map-horizontal' as const });
-    const first = Object.freeze({ ...childCard, id: 'connector-first-child', height: 80 });
-    const second = Object.freeze({ ...childCard, id: 'connector-second-child', height: 100 });
+    const parent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'mind-map-horizontal' as const,
+    });
+    const first = Object.freeze({
+      ...childCard,
+      id: 'connector-first-child',
+      height: 80,
+    });
+    const second = Object.freeze({
+      ...childCard,
+      id: 'connector-second-child',
+      height: 100,
+    });
     await loadFrozenCards(page, [parent, first, second]);
     await waitForAnimationFrame(page);
 
@@ -826,7 +1101,11 @@ test.describe('CardCanvas mind-map data contract', () => {
   }) => {
     // Given: a free parent and a free child start without mind-map mode.
     // 显式指定 'free' 模式以测试 free 模式的 attach expansion 和 detach 语义
-    const parent = Object.freeze({ ...parentCard, id: 'free-regression-parent', childrenLayoutMode: 'free' as const });
+    const parent = Object.freeze({
+      ...parentCard,
+      id: 'free-regression-parent',
+      childrenLayoutMode: 'free' as const,
+    });
     const child = Object.freeze({
       ...childCard,
       id: 'free-regression-child',
@@ -839,14 +1118,24 @@ test.describe('CardCanvas mind-map data contract', () => {
     await loadFrozenCards(page, [parent, child]);
     const parentBefore = getCardDataById(await getCardData(page), parent.id);
     const childLocator = page.locator(cardLocatorSelector(child.id));
-    await childLocator.locator('.cards-card-canvas__card-header').scrollIntoViewIfNeeded();
-    const parentBox = await getRequiredBox(page.locator(cardLocatorSelector(parent.id)));
+    await childLocator
+      .locator('.cards-card-canvas__card-header')
+      .scrollIntoViewIfNeeded();
+    const parentBox = await getRequiredBox(
+      page.locator(cardLocatorSelector(parent.id))
+    );
 
     // When: the child attaches inside the free parent's bottom-right interior.
     await dragCardCenterToPoint(
       page,
-      { card: childLocator, handle: childLocator.locator('.cards-card-canvas__card-header') },
-      { x: parentBox.x + parentBox.width - 4, y: parentBox.y + parentBox.height - 4 }
+      {
+        card: childLocator,
+        handle: childLocator.locator('.cards-card-canvas__card-header'),
+      },
+      {
+        x: parentBox.x + parentBox.width - 4,
+        y: parentBox.y + parentBox.height - 4,
+      }
     );
     const attachedCards = await getCardData(page);
     const parentAfterAttach = getCardDataById(attachedCards, parent.id);
@@ -858,11 +1147,19 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(parentAfterAttach.height).toBeGreaterThan(parentBefore.height);
 
     // When: the attached child is dragged onto empty canvas.
-    const stageBox = await getRequiredBox(page.locator('.card-canvas-demo-stage'));
+    const stageBox = await getRequiredBox(
+      page.locator('.card-canvas-demo-stage')
+    );
     await dragCardCenterToPoint(
       page,
-      { card: childLocator, handle: childLocator.locator('.cards-card-canvas__card-header') },
-      { x: stageBox.x + stageBox.width - 20, y: stageBox.y + stageBox.height - 20 }
+      {
+        card: childLocator,
+        handle: childLocator.locator('.cards-card-canvas__card-header'),
+      },
+      {
+        x: stageBox.x + stageBox.width - 20,
+        y: stageBox.y + stageBox.height - 20,
+      }
     );
 
     // Then: free-mode empty drop removes the parent assignment.

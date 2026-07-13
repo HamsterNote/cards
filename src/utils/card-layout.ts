@@ -40,6 +40,39 @@ export function getMindMapLayoutMode(
   return card.childrenLayoutMode ?? 'arrange';
 }
 
+export function shouldNormalizeMindMapAfterCardUpdate(
+  before: CardCanvasCard,
+  after: CardCanvasCard,
+  cards: readonly CardCanvasCard[]
+): boolean {
+  const hasLayoutChange =
+    before.parent !== after.parent ||
+    before.x !== after.x ||
+    before.y !== after.y ||
+    before.width !== after.width ||
+    before.height !== after.height ||
+    before.childrenLayoutMode !== after.childrenLayoutMode;
+  if (!hasLayoutChange) {
+    return false;
+  }
+
+  const previousParent =
+    before.parent === undefined
+      ? undefined
+      : cards.find((card) => card.id === before.parent);
+  const nextParent =
+    after.parent === undefined
+      ? undefined
+      : cards.find((card) => card.id === after.parent);
+  return (
+    after.childrenLayoutMode === 'mind-map-horizontal' ||
+    (previousParent !== undefined &&
+      getMindMapLayoutMode(previousParent) === 'mind-map-horizontal') ||
+    (nextParent !== undefined &&
+      getMindMapLayoutMode(nextParent) === 'mind-map-horizontal')
+  );
+}
+
 function buildDirectChildrenByParent(
   cards: readonly CardCanvasCard[]
 ): ReadonlyMap<string, readonly string[]> {
@@ -191,7 +224,11 @@ function normalizeParentLayout(
     return;
   }
 
-  const blockHeight = calculateChildrenBlockHeight(context, childIds, visitingIds);
+  const blockHeight = calculateChildrenBlockHeight(
+    context,
+    childIds,
+    visitingIds
+  );
   let slotTop = parent.y + parent.height / 2 - blockHeight / 2;
 
   for (const childId of childIds) {

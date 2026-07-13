@@ -7,6 +7,7 @@ import {
   MIND_MAP_HORIZONTAL_GAP,
   getMindMapLayoutMode,
   normalizeMindMapLayout,
+  shouldNormalizeMindMapAfterCardUpdate,
 } from '../utils/card-layout';
 import './CardCanvas.css';
 
@@ -88,7 +89,10 @@ export interface CardCanvasProps {
   /** 是否启用连线模式。默认 false。 */
   linkMode?: boolean;
   /** 连线模式下，点击目标卡片时的回调 */
-  onLinkClick?: (targetCard: CardCanvasCard, sourceCard: CardCanvasCard) => void;
+  onLinkClick?: (
+    targetCard: CardCanvasCard,
+    sourceCard: CardCanvasCard
+  ) => void;
 }
 
 /** 连线拖拽过程中的实时状态 */
@@ -129,26 +133,6 @@ function mergeCardPatch(
   return { ...card, ...data };
 }
 
-function shouldNormalizeAfterPatch(
-  before: CardCanvasCard,
-  after: CardCanvasCard
-): boolean {
-  // 使用 getMindMapLayoutMode 获取有效模式，使 undefined 也被当作 'arrange' 处理
-  const beforeMode = getMindMapLayoutMode(before);
-  const afterMode = getMindMapLayoutMode(after);
-
-  // free 模式不自动归一化子卡片位置
-  if (afterMode === 'free') {
-    return false;
-  }
-
-  // mind-map-horizontal 与 arrange 模式都需要归一化以重新定位子卡片；
-  // 模式切换时也需要重新归一化
-  return beforeMode !== afterMode ||
-    afterMode === 'mind-map-horizontal' ||
-    afterMode === 'arrange';
-}
-
 export function CardCanvas({
   cards,
   onCardsChange,
@@ -165,7 +149,9 @@ export function CardCanvas({
   onLinkClick,
 }: CardCanvasProps) {
   const linkMode = linkModeProp ?? false;
-  const [parentCandidateId, setParentCandidateId] = useState<string | undefined>();
+  const [parentCandidateId, setParentCandidateId] = useState<
+    string | undefined
+  >();
   // 当前正在被拖拽的卡片 id（仅有一张卡片在拖拽时才有值），用于隐藏 Popover
   const [movingCardId, setMovingCardId] = useState<string | undefined>();
   // 连线拖拽实时状态：拖拽期间存储源头卡片、指针位置、目标卡片
@@ -258,7 +244,11 @@ export function CardCanvas({
           {cards.map((childCard) => {
             if (!childCard.parent) return null;
             const parentCard = cards.find((c) => c.id === childCard.parent);
-            if (!parentCard || getMindMapLayoutMode(parentCard) !== 'mind-map-horizontal') return null;
+            if (
+              !parentCard ||
+              getMindMapLayoutMode(parentCard) !== 'mind-map-horizontal'
+            )
+              return null;
 
             const parentRightX = parentCard.x + parentCard.width;
             const parentCenterY = parentCard.y + parentCard.height / 2;
@@ -281,7 +271,9 @@ export function CardCanvas({
         {cards.map((card) => {
           // 判断该卡片是否需要展示 Popover：提供了 renderPopover、卡片被选中、且当前没有卡片在拖拽
           const showPopover =
-            !!renderPopover && (selected?.includes(card.id) ?? false) && !movingCardId;
+            !!renderPopover &&
+            (selected?.includes(card.id) ?? false) &&
+            !movingCardId;
 
           // set 回调：将部分数据合并到当前卡片，并触发 onCardsChange
           const setCard = (data: Partial<Omit<CardCanvasCard, 'id'>>) => {
@@ -289,7 +281,11 @@ export function CardCanvas({
             const next = cards.map((currentCard) =>
               currentCard.id === card.id ? mergedCard : currentCard
             );
-            const nextCards = shouldNormalizeAfterPatch(card, mergedCard)
+            const nextCards = shouldNormalizeMindMapAfterCardUpdate(
+              card,
+              mergedCard,
+              next
+            )
               ? normalizeMindMapLayout(next)
               : next;
             onCardsChange?.(nextCards);
@@ -366,7 +362,10 @@ export function CardCanvas({
             return (
               <>
                 {/* SVG 覆盖层：从源头卡片中心到指针位置的虚线 */}
-                <svg className="cards-card-canvas__link-drag-overlay" aria-hidden="true">
+                <svg
+                  className="cards-card-canvas__link-drag-overlay"
+                  aria-hidden="true"
+                >
                   <line
                     className={`cards-card-canvas__link-drag-line${
                       hasTarget

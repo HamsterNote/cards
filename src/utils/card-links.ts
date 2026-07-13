@@ -29,7 +29,9 @@ function uniqueLinkIdsWith(
   card: CardCanvasCard,
   requiredTargetId: string
 ): readonly string[] {
-  return Array.from(new Set([...normalizeLinkedCardIds(card), requiredTargetId]));
+  return Array.from(
+    new Set([...normalizeLinkedCardIds(card), requiredTargetId])
+  );
 }
 
 export function addSymmetricCardLink(

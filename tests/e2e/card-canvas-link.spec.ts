@@ -25,7 +25,9 @@ async function createLinkedPair(page: Page): Promise<void> {
   await addCard(page, 'Beta', 'Beta content');
   await dragLocatorBy(
     page,
-    page.locator(`${cardLocatorSelector('card-2')} .cards-card-canvas__card-header`),
+    page.locator(
+      `${cardLocatorSelector('card-2')} .cards-card-canvas__card-header`
+    ),
     { x: 320, y: 240 }
   );
   await enableOption(page, LINK_MODE_SELECTOR);
@@ -39,13 +41,17 @@ test.describe('CardCanvas link mode', () => {
     await page.goto('/');
   });
 
-  test('keeps default-off dragging as normal movement and parent assignment', async ({ page }) => {
+  test('keeps default-off dragging as normal movement and parent assignment', async ({
+    page,
+  }) => {
     // Given: link mode is off and card B is positioned as a parent target.
     await addCard(page, 'Alpha', 'Alpha content');
     await addCard(page, 'Beta', 'Beta content');
     await dragLocatorBy(
       page,
-      page.locator(`${cardLocatorSelector('card-2')} .cards-card-canvas__card-header`),
+      page.locator(
+        `${cardLocatorSelector('card-2')} .cards-card-canvas__card-header`
+      ),
       { x: 320, y: 240 }
     );
     await expect(page.locator(LINK_MODE_SELECTOR)).not.toBeChecked();
@@ -65,20 +71,28 @@ test.describe('CardCanvas link mode', () => {
     expect(linkedIds(getCardDataById(afterCards, 'card-2'))).toEqual([]);
   });
 
-  test('creates a symmetric link without moving, parenting, parent-candidate UI, or select-on-move-end', async ({ page }) => {
+  test('creates a symmetric link without moving, parenting, parent-candidate UI, or select-on-move-end', async ({
+    page,
+  }) => {
     // Given: select-on-move-end is enabled to catch accidental normal drag semantics.
     await disableOption(page, '[data-card-select-new-card-toggle]');
     await addCard(page, 'Alpha', 'Alpha content');
     await addCard(page, 'Beta', 'Beta content');
     await dragLocatorBy(
       page,
-      page.locator(`${cardLocatorSelector('card-2')} .cards-card-canvas__card-header`),
+      page.locator(
+        `${cardLocatorSelector('card-2')} .cards-card-canvas__card-header`
+      ),
       { x: 320, y: 240 }
     );
     await enableOption(page, '[data-card-select-on-move-end-toggle]');
     await enableOption(page, LINK_MODE_SELECTOR);
-    const selectedBefore = await page.locator('[data-card-selected-display]').innerText();
-    const selectCountBefore = await page.locator('[data-card-select-count]').innerText();
+    const selectedBefore = await page
+      .locator('[data-card-selected-display]')
+      .innerText();
+    const selectCountBefore = await page
+      .locator('[data-card-select-count]')
+      .innerText();
     const beforeCards = await getCardData(page);
     const beforeAlpha = getCardDataById(beforeCards, 'card-1');
     const beforeBeta = getCardDataById(beforeCards, 'card-2');
@@ -97,17 +111,25 @@ test.describe('CardCanvas link mode', () => {
     expectNoParent(afterAlpha);
     expectNoParent(afterBeta);
     await expect(page.locator('[data-parent-candidate="true"]')).toHaveCount(0);
-    await expect(page.locator('[data-card-selected-display]')).toHaveText(selectedBefore);
-    await expect(page.locator('[data-card-select-count]')).toHaveText(selectCountBefore);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      selectedBefore
+    );
+    await expect(page.locator('[data-card-select-count]')).toHaveText(
+      selectCountBefore
+    );
   });
 
-  test('ignores self, empty-canvas, and duplicate link drops', async ({ page }) => {
+  test('ignores self, empty-canvas, and duplicate link drops', async ({
+    page,
+  }) => {
     // Given: two cards and link mode are ready.
     await addCard(page, 'Alpha', 'Alpha content');
     await addCard(page, 'Beta', 'Beta content');
     await dragLocatorBy(
       page,
-      page.locator(`${cardLocatorSelector('card-2')} .cards-card-canvas__card-header`),
+      page.locator(
+        `${cardLocatorSelector('card-2')} .cards-card-canvas__card-header`
+      ),
       { x: 320, y: 240 }
     );
     await enableOption(page, LINK_MODE_SELECTOR);
@@ -115,11 +137,18 @@ test.describe('CardCanvas link mode', () => {
 
     // When: A is dropped on itself and then onto empty canvas.
     await linkDragHeaderToCard(page, 'card-1', 'card-1');
-    const stageBox = await getRequiredBox(page.locator('.card-canvas-demo-stage'));
+    const stageBox = await getRequiredBox(
+      page.locator('.card-canvas-demo-stage')
+    );
     await dragHandleToPoint(
       page,
-      page.locator(`${cardLocatorSelector('card-1')} .cards-card-canvas__card-header`),
-      { x: stageBox.x + stageBox.width - 20, y: stageBox.y + stageBox.height - 20 }
+      page.locator(
+        `${cardLocatorSelector('card-1')} .cards-card-canvas__card-header`
+      ),
+      {
+        x: stageBox.x + stageBox.width - 20,
+        y: stageBox.y + stageBox.height - 20,
+      }
     );
     await waitForAnimationFrame(page);
 
@@ -134,15 +163,25 @@ test.describe('CardCanvas link mode', () => {
 
     // Then: the existing link is not duplicated in data or connector DOM.
     afterCards = await getCardData(page);
-    expect(linkedIds(getCardDataById(afterCards, 'card-1'))).toEqual(['card-2']);
-    expect(linkedIds(getCardDataById(afterCards, 'card-2'))).toEqual(['card-1']);
+    expect(linkedIds(getCardDataById(afterCards, 'card-1'))).toEqual([
+      'card-2',
+    ]);
+    expect(linkedIds(getCardDataById(afterCards, 'card-2'))).toEqual([
+      'card-1',
+    ]);
     await expect(page.locator('[data-card-link-connector]')).toHaveCount(1);
   });
 
-  test('renders reciprocal footer controls with SVG styling and callback order despite selected popover', async ({ page }) => {
+  test('renders reciprocal footer controls with SVG styling and callback order despite selected popover', async ({
+    page,
+  }) => {
     // Given: B remains selected after linking, so its renderPopover is visible.
     await createLinkedPair(page);
-    await page.locator(`${cardLocatorSelector('card-2')} .cards-card-canvas__card-content`).click();
+    await page
+      .locator(
+        `${cardLocatorSelector('card-2')} .cards-card-canvas__card-content`
+      )
+      .click();
     await expect(page.locator('.cards-card-canvas__popover')).toBeVisible();
 
     // Then: each linked card exposes a reciprocal, styled, SVG-backed footer button.
@@ -167,12 +206,12 @@ test.describe('CardCanvas link mode', () => {
     await betaToAlpha.click();
 
     // Then: the click reaches the button exactly once with target/source order intact.
-    await expect(page.locator('[data-card-link-callback-result]')).toContainText(
-      'Source: Beta'
-    );
-    await expect(page.locator('[data-card-link-callback-result]')).toContainText(
-      'Target: Alpha'
-    );
+    await expect(
+      page.locator('[data-card-link-callback-result]')
+    ).toContainText('Source: Beta');
+    await expect(
+      page.locator('[data-card-link-callback-result]')
+    ).toContainText('Target: Alpha');
 
     // And: the link target card becomes selected.
     await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
@@ -202,7 +241,9 @@ test.describe('CardCanvas link mode', () => {
     );
   });
 
-  test('draws one non-interactive dashed connector from center to center and updates after resize', async ({ page }) => {
+  test('draws one non-interactive dashed connector from center to center and updates after resize', async ({
+    page,
+  }) => {
     // Given: a linked pair is visible.
     await createLinkedPair(page);
 
@@ -217,11 +258,16 @@ test.describe('CardCanvas link mode', () => {
     await expect(line).toHaveCSS('stroke-dasharray', '4px, 4px');
     await expectConnectorMatchesCardCenters(page, 'card-1', 'card-2');
 
-    const cardBox = await getRequiredBox(page.locator(cardLocatorSelector('card-1')));
+    const cardBox = await getRequiredBox(
+      page.locator(cardLocatorSelector('card-1'))
+    );
     const topElementCardId = await page.evaluate(
       (point: { readonly x: number; readonly y: number }) => {
         const element = document.elementFromPoint(point.x, point.y);
-        return element?.closest('[data-card-id]')?.getAttribute('data-card-id') ?? null;
+        return (
+          element?.closest('[data-card-id]')?.getAttribute('data-card-id') ??
+          null
+        );
       },
       { x: cardBox.x + cardBox.width / 2, y: cardBox.y + cardBox.height / 2 }
     );
@@ -231,7 +277,9 @@ test.describe('CardCanvas link mode', () => {
     const beforeEndpoints = await connectorEndpoints(page);
     await dragLocatorBy(
       page,
-      page.locator(`${cardLocatorSelector('card-2')} [data-card-resize-handle]`),
+      page.locator(
+        `${cardLocatorSelector('card-2')} [data-card-resize-handle]`
+      ),
       { x: 60, y: 40 }
     );
 
@@ -242,13 +290,17 @@ test.describe('CardCanvas link mode', () => {
     await expectConnectorMatchesCardCenters(page, 'card-1', 'card-2');
   });
 
-  test('chooses the highest overlapping target by zIndex then later array order', async ({ page }) => {
+  test('chooses the highest overlapping target by zIndex then later array order', async ({
+    page,
+  }) => {
     // Given: source A overlaps targets B and C, with C later and higher zIndex.
     await disableOption(page, '[data-card-select-new-card-toggle]');
     await addCard(page, 'Alpha', 'Alpha content');
     await dragLocatorBy(
       page,
-      page.locator(`${cardLocatorSelector('card-1')} .cards-card-canvas__card-header`),
+      page.locator(
+        `${cardLocatorSelector('card-1')} .cards-card-canvas__card-header`
+      ),
       { x: 320, y: 240 }
     );
     await addCard(page, 'Beta', 'Beta content');
@@ -257,11 +309,16 @@ test.describe('CardCanvas link mode', () => {
 
     // When: A is link-dropped inside the overlapping stack.
     const cardA = page.locator(cardLocatorSelector('card-1'));
-    const cardCBox = await getRequiredBox(page.locator(cardLocatorSelector('card-3')));
+    const cardCBox = await getRequiredBox(
+      page.locator(cardLocatorSelector('card-3'))
+    );
     await dragHandleToPoint(
       page,
       cardA.locator('.cards-card-canvas__card-header'),
-      { x: cardCBox.x + cardCBox.width / 2, y: cardCBox.y + cardCBox.height / 2 }
+      {
+        x: cardCBox.x + cardCBox.width / 2,
+        y: cardCBox.y + cardCBox.height / 2,
+      }
     );
 
     // Then: the topmost later card wins over the earlier overlapping card.
@@ -271,7 +328,9 @@ test.describe('CardCanvas link mode', () => {
     expect(linkedIds(getCardDataById(cards, 'card-3'))).toEqual(['card-1']);
   });
 
-  test('filters missing linked targets out of footers and connectors', async ({ page }) => {
+  test('filters missing linked targets out of footers and connectors', async ({
+    page,
+  }) => {
     // Given: a custom state contains a missing linkedCardIds target.
     await page.evaluate(() => {
       window.dispatchEvent(
@@ -292,7 +351,9 @@ test.describe('CardCanvas link mode', () => {
         })
       );
     });
-    await expect(page.locator('[data-card-data-content]')).toContainText('missing-id');
+    await expect(page.locator('[data-card-data-content]')).toContainText(
+      'missing-id'
+    );
 
     // When: the demo has no matching linked target in its real card graph.
     const cards = await getCardData(page);
@@ -308,15 +369,23 @@ test.describe('CardCanvas link mode', () => {
     await expect(page.locator('[data-card-link-connector]')).toHaveCount(0);
   });
 
-  test('removes stale footer links after a linked target is deleted', async ({ page }) => {
+  test('removes stale footer links after a linked target is deleted', async ({
+    page,
+  }) => {
     // Given: a real linked pair is visible in reciprocal footers.
     await createLinkedPair(page);
     await expect(
-      page.locator('[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]')
+      page.locator(
+        '[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]'
+      )
     ).toHaveCount(1);
 
     // When: the linked target card is deleted from the graph.
-    await page.locator(`${cardLocatorSelector('card-2')} .cards-card-canvas__card-content`).click();
+    await page
+      .locator(
+        `${cardLocatorSelector('card-2')} .cards-card-canvas__card-content`
+      )
+      .click();
     await page.getByTestId('delete-selected-card').click();
 
     // Then: the source footer re-resolves linked targets and drops the stale button.
@@ -324,28 +393,38 @@ test.describe('CardCanvas link mode', () => {
     const cards = await getCardData(page);
     expect(linkedIds(getCardDataById(cards, 'card-1'))).toEqual(['card-2']);
     await expect(
-      page.locator('[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]')
+      page.locator(
+        '[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]'
+      )
     ).toHaveCount(0);
     await expect(page.locator('[data-card-link-footer]')).toHaveCount(0);
     await expect(page.locator('[data-card-link-connector]')).toHaveCount(0);
   });
 
-  test('selects the linked target card on footer click even when onLinkClick is absent', async ({ page }) => {
+  test('selects the linked target card on footer click even when onLinkClick is absent', async ({
+    page,
+  }) => {
     // Given: the demo mounts CardCanvas without the optional onLinkClick prop.
     await createLinkedPair(page);
     await disableOption(page, '[data-card-link-callback-enabled-toggle]');
-    const beforeBox = await getRequiredBox(page.locator(cardLocatorSelector('card-1')));
+    const beforeBox = await getRequiredBox(
+      page.locator(cardLocatorSelector('card-1'))
+    );
     const callbackResultBefore = await page
       .locator('[data-card-link-callback-result]')
       .innerText();
 
     // When: a footer button is clicked without an onLinkClick prop.
     await page
-      .locator('[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]')
+      .locator(
+        '[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]'
+      )
       .click();
 
     // Then: the link target card becomes selected, callback and geometry stay unchanged.
-    const afterBox = await getRequiredBox(page.locator(cardLocatorSelector('card-1')));
+    const afterBox = await getRequiredBox(
+      page.locator(cardLocatorSelector('card-1'))
+    );
     await expect(page.locator('[data-card-link-callback-result]')).toHaveText(
       callbackResultBefore
     );

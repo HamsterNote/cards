@@ -1,12 +1,12 @@
-import type { MutableRefObject, ReactNode } from 'react';
-import { useEffect, useRef } from 'react';
 import {
   Drag,
   DragOperationType,
-  FingerOperationType,
   type Finger,
+  FingerOperationType,
   type Pose,
 } from '@system-ui-js/multi-drag';
+import type { MutableRefObject, ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
 import type { CardCanvasCard, CardCanvasOptions } from './CardCanvas';
 import type { CardDragPositionSnapshot, ContentInset } from '../utils/cards';
 import {
@@ -56,7 +56,10 @@ export interface CardCanvasItemProps {
   readonly onLinkDragStart?: ((sourceCardId: string) => void) | undefined;
   /** 连线拖拽过程中回调，参数为指针位置和目标卡片 id */
   readonly onLinkDragMove?:
-    | ((point: { readonly x: number; readonly y: number }, targetCardId?: string) => void)
+    | ((
+        point: { readonly x: number; readonly y: number },
+        targetCardId?: string
+      ) => void)
     | undefined;
   /** 连线拖拽结束时回调 */
   readonly onLinkDragEnd?: (() => void) | undefined;
@@ -108,7 +111,9 @@ export function CardCanvasItem({
   >(undefined);
   const isLinkDragRef = useRef(false);
   const linkTargetIdRef = useRef<string | undefined>(undefined);
-  const canMoveOrResize = options.requireSelectionToMoveResize ? isSelected : true;
+  const canMoveOrResize = options.requireSelectionToMoveResize
+    ? isSelected
+    : true;
   const canMoveOrResizeRef = useRef(canMoveOrResize);
   const isManagedChildDragRef = useRef(false);
   const hasDetachedRef = useRef(false);
@@ -261,10 +266,14 @@ export function CardCanvasItem({
       }
 
       onDraggingChangeRef.current?.(true);
-      dragPositionSnapshot = createDragPositionSnapshot(cardsRef.current, cardId);
-      const parentCard = currentCard.parent !== undefined
-        ? cardsRef.current.find((c) => c.id === currentCard.parent)
-        : undefined;
+      dragPositionSnapshot = createDragPositionSnapshot(
+        cardsRef.current,
+        cardId
+      );
+      const parentCard =
+        currentCard.parent !== undefined
+          ? cardsRef.current.find((c) => c.id === currentCard.parent)
+          : undefined;
       // mind-map-horizontal 与 arrange 都是「受管控子卡片」：
       // 拖动距离 < 阈值时卡片保持原位（snap-back），>= 阈值时才真正 detach 出父级。
       // arrange 模式下 detach 后其他 sibling 会自动重排填补空位。
@@ -316,7 +325,12 @@ export function CardCanvasItem({
         return;
       }
 
-      if (!onCardsChangeRef.current || !startOp || dragPositionSnapshot.size === 0) return;
+      if (
+        !onCardsChangeRef.current ||
+        !startOp ||
+        dragPositionSnapshot.size === 0
+      )
+        return;
 
       const deltaX = moveOp.point.x - startOp.point.x;
       const deltaY = moveOp.point.y - startOp.point.y;
@@ -340,7 +354,10 @@ export function CardCanvasItem({
         cardPropRef.current =
           normalizedCards.find((c) => c.id === cardId) ?? cardPropRef.current;
         onCardsChangeRef.current(normalizedCards);
-        dragPositionSnapshot = createDragPositionSnapshot(normalizedCards, cardId);
+        dragPositionSnapshot = createDragPositionSnapshot(
+          normalizedCards,
+          cardId
+        );
       }
 
       const moveResult = moveCardsFromSnapshot(
@@ -411,7 +428,10 @@ export function CardCanvasItem({
         );
         const movingCardIds = new Set<string>(dragPositionSnapshot.keys());
 
-        if (draggedCard !== undefined && pointerPointRef.current !== undefined) {
+        if (
+          draggedCard !== undefined &&
+          pointerPointRef.current !== undefined
+        ) {
           const layoutResult = finalizeCardDragLayout(
             cardsRef.current,
             cardId,
@@ -433,7 +453,9 @@ export function CardCanvasItem({
         resetCardElementToModelPosition();
         window.requestAnimationFrame(() => {
           resetCardElementToModelPosition();
-          cardEl.classList.remove('cards-card-canvas__card--drag-pending-detach');
+          cardEl.classList.remove(
+            'cards-card-canvas__card--drag-pending-detach'
+          );
         });
       } else {
         cardEl.classList.remove('cards-card-canvas__card--drag-pending-detach');
@@ -452,14 +474,12 @@ export function CardCanvasItem({
 
     drag.addEventListener(DragOperationType.Start, onStart);
     drag.addEventListener(DragOperationType.Move, onMove);
-    drag.addEventListener(DragOperationType.End, onEnd);
     drag.addEventListener(DragOperationType.AllEnd, onEnd);
 
     return () => {
       document.removeEventListener('pointermove', trackLinkPointer, true);
       drag.removeEventListener(DragOperationType.Start, onStart);
       drag.removeEventListener(DragOperationType.Move, onMove);
-      drag.removeEventListener(DragOperationType.End, onEnd);
       drag.removeEventListener(DragOperationType.AllEnd, onEnd);
       drag.destroy();
       dragRef.current = null;
@@ -542,10 +562,14 @@ export function CardCanvasItem({
       const nextHeight = Math.max(80, initialHeight + effectiveDeltaY);
       const cardId = cardPropRef.current.id;
 
-      const layoutResult = resizeCardWithMindMapNormalization(cardsRef.current, cardId, {
-        width: nextWidth,
-        height: nextHeight,
-      });
+      const layoutResult = resizeCardWithMindMapNormalization(
+        cardsRef.current,
+        cardId,
+        {
+          width: nextWidth,
+          height: nextHeight,
+        }
+      );
       const finalCards = layoutResult.cards;
 
       cardPropRef.current = layoutResult.draggedCard ?? cardPropRef.current;
@@ -555,7 +579,6 @@ export function CardCanvasItem({
 
     dragHandle.addEventListener(DragOperationType.Start, handleStart);
     dragHandle.addEventListener(DragOperationType.Move, handleMove);
-    dragHandle.addEventListener(DragOperationType.End, finishResizeMode);
     dragHandle.addEventListener(DragOperationType.AllEnd, finishResizeMode);
 
     return () => {
@@ -564,17 +587,25 @@ export function CardCanvasItem({
       document.removeEventListener('pointercancel', finishResizeMode, true);
       dragHandle.removeEventListener(DragOperationType.Start, handleStart);
       dragHandle.removeEventListener(DragOperationType.Move, handleMove);
-      dragHandle.removeEventListener(DragOperationType.End, finishResizeMode);
-      dragHandle.removeEventListener(DragOperationType.AllEnd, finishResizeMode);
+      dragHandle.removeEventListener(
+        DragOperationType.AllEnd,
+        finishResizeMode
+      );
       dragHandle.destroy();
       resizeDragRef.current = null;
     };
   }, [cardsRef, onCardsChangeRef, setParentCandidateId]);
 
   const contentRef = useRef<HTMLDivElement>(null);
-  const contentPointerDownRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
+  const contentPointerDownRef = useRef<{
+    readonly x: number;
+    readonly y: number;
+  } | null>(null);
   const headerRef = useRef<HTMLDivElement>(null);
-  const headerPointerDownRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
+  const headerPointerDownRef = useRef<{
+    readonly x: number;
+    readonly y: number;
+  } | null>(null);
 
   // Bind the content and header click listeners natively so these divs are not flagged
   // as interactive elements by static a11y lint, while preserving mouse-only card selection.
@@ -585,7 +616,10 @@ export function CardCanvasItem({
 
     const bindClickSelect = (
       element: HTMLElement,
-      pointerDownRef: MutableRefObject<{ readonly x: number; readonly y: number } | null>
+      pointerDownRef: MutableRefObject<{
+        readonly x: number;
+        readonly y: number;
+      } | null>
     ) => {
       const handlePointerDown = (e: PointerEvent) => {
         if (
@@ -616,10 +650,13 @@ export function CardCanvasItem({
         }
         const start = pointerDownRef.current;
         pointerDownRef.current = null;
-        if (optionsRef.current.requireSelectionToMoveResize && start) {
+        if (start) {
           const dx = e.clientX - start.x;
           const dy = e.clientY - start.y;
-          if (dx * dx + dy * dy >= CONTENT_CLICK_MOVE_THRESHOLD_PX * CONTENT_CLICK_MOVE_THRESHOLD_PX) {
+          if (
+            dx * dx + dy * dy >=
+            CONTENT_CLICK_MOVE_THRESHOLD_PX * CONTENT_CLICK_MOVE_THRESHOLD_PX
+          ) {
             return;
           }
         }
@@ -664,11 +701,15 @@ export function CardCanvasItem({
     onSelectRef.current?.(targetCard.id);
   };
 
-  const handleLinkButtonPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const handleLinkButtonPointerDown = (
+    event: React.PointerEvent<HTMLButtonElement>
+  ) => {
     event.stopPropagation();
   };
 
-  const handleLinkButtonMouseDown = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleLinkButtonMouseDown = (
+    event: React.MouseEvent<HTMLButtonElement>
+  ) => {
     event.stopPropagation();
   };
 
@@ -706,7 +747,11 @@ export function CardCanvasItem({
         zIndex: card.zIndex,
       }}
     >
-      <div ref={headerRef} className="cards-card-canvas__card-header" style={card.titleStyle}>
+      <div
+        ref={headerRef}
+        className="cards-card-canvas__card-header"
+        style={card.titleStyle}
+      >
         {renderCardTitle ? renderCardTitle(card.title) : card.title}
       </div>
       <div

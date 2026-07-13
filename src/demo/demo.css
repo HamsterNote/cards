@@ -159,15 +159,6 @@ body {
   transform: translate(50%, 50%);
 }
 
-.card-canvas-demo-popover-content {
-  pointer-events: none;
-}
-
-.card-canvas-demo-popover-content input,
-.card-canvas-demo-popover-content select {
-  pointer-events: auto;
-}
-
 .demo__data-display {
   margin-top: 1.5rem;
   border-top: 1px solid rgba(0, 0, 0, 0.08);

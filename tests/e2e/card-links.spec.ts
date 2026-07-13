@@ -8,10 +8,7 @@ import {
   resolveLinkedCards,
 } from '../../src/utils/card-links';
 
-function makeCard(
-  id: string,
-  links?: readonly string[]
-): CardCanvasCard {
+function makeCard(id: string, links?: readonly string[]): CardCanvasCard {
   const baseCard = {
     id,
     title: `Title ${id}`,

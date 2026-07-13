@@ -3,6 +3,7 @@ import type { CardCanvasCard } from '../../src';
 import {
   getMindMapLayoutMode,
   normalizeMindMapLayout,
+  shouldNormalizeMindMapAfterCardUpdate,
 } from '../../src/utils/card-layout';
 
 function makeCard(id: string, parent?: string): CardCanvasCard {
@@ -88,7 +89,13 @@ test.describe('normalizeMindMapLayout utility', () => {
         height: 80,
         childrenLayoutMode: 'mind-map-horizontal',
       },
-      { ...makeCard('grandchild', 'child'), x: -500, y: 900, width: 120, height: 70 },
+      {
+        ...makeCard('grandchild', 'child'),
+        x: -500,
+        y: 900,
+        width: 120,
+        height: 70,
+      },
     ]);
 
     // When: normalization repositions root's subtree.
@@ -115,8 +122,21 @@ test.describe('normalizeMindMapLayout utility', () => {
         childrenLayoutMode: 'mind-map-horizontal',
       },
       // 显式指定 free 模式，否则默认 arrange 会重新排列后代卡片
-      { ...makeCard('free-child', 'root'), x: 500, y: 500, width: 100, height: 80, childrenLayoutMode: 'free' as const },
-      { ...makeCard('descendant', 'free-child'), x: 530, y: 560, width: 90, height: 60 },
+      {
+        ...makeCard('free-child', 'root'),
+        x: 500,
+        y: 500,
+        width: 100,
+        height: 80,
+        childrenLayoutMode: 'free' as const,
+      },
+      {
+        ...makeCard('descendant', 'free-child'),
+        x: 530,
+        y: 560,
+        width: 90,
+        height: 60,
+      },
     ]);
 
     // When: the free-mode child is moved into its canonical slot.
@@ -223,7 +243,10 @@ test.describe('normalizeMindMapLayout utility', () => {
   test('normalizes missing child layout mode to arrange', () => {
     // Given: cards with absent and explicit layout modes.
     const missingModeCard = makeCard('missing');
-    const freeModeCard = { ...makeCard('free'), childrenLayoutMode: 'free' } satisfies CardCanvasCard;
+    const freeModeCard = {
+      ...makeCard('free'),
+      childrenLayoutMode: 'free',
+    } satisfies CardCanvasCard;
     const mindMapCard = {
       ...makeCard('mind-map'),
       childrenLayoutMode: 'mind-map-horizontal',
@@ -435,5 +458,69 @@ test.describe('normalizeMindMapLayout — arrange mode', () => {
 
     expect(emptyResult).toEqual([]);
     expect(freeResult).toEqual(freeCards);
+  });
+
+  test('normalizes card patches only when layout fields change', () => {
+    // Given: a mind-map parent receives either content-only or geometric updates.
+    const before = {
+      ...makeCard('parent'),
+      childrenLayoutMode: 'mind-map-horizontal',
+    } satisfies CardCanvasCard;
+
+    // When / Then: display data does not reflow the tree, while geometry does.
+    expect(
+      shouldNormalizeMindMapAfterCardUpdate(
+        before,
+        { ...before, title: 'Updated title' },
+        [before]
+      )
+    ).toBe(false);
+    expect(
+      shouldNormalizeMindMapAfterCardUpdate(
+        before,
+        { ...before, width: before.width + 40 },
+        [before]
+      )
+    ).toBe(true);
+
+    // And: switching to free mode intentionally preserves existing child positions.
+    expect(
+      shouldNormalizeMindMapAfterCardUpdate(
+        before,
+        { ...before, childrenLayoutMode: 'free' },
+        [before]
+      )
+    ).toBe(false);
+
+    // And: resizing a managed child reflows its mind-map siblings.
+    const child = { ...makeCard('child', before.id), width: 100 };
+    expect(
+      shouldNormalizeMindMapAfterCardUpdate(child, { ...child, width: 140 }, [
+        before,
+        child,
+      ])
+    ).toBe(true);
+
+    // And: explicit free mode does not exempt a child managed by a mind-map parent.
+    const explicitFreeChild = {
+      ...child,
+      childrenLayoutMode: 'free',
+    } satisfies CardCanvasCard;
+    expect(
+      shouldNormalizeMindMapAfterCardUpdate(
+        explicitFreeChild,
+        { ...explicitFreeChild, height: 120 },
+        [before, explicitFreeChild]
+      )
+    ).toBe(true);
+
+    // And: removing a child still reflows its previous mind-map siblings.
+    expect(
+      shouldNormalizeMindMapAfterCardUpdate(
+        child,
+        { ...child, parent: undefined },
+        [before, child]
+      )
+    ).toBe(true);
   });
 });

@@ -108,11 +108,7 @@ async function getRequiredBox(locator: Locator) {
   return expectNotNull(await locator.boundingBox());
 }
 
-async function dragLocatorBy(
-  page: Page,
-  locator: Locator,
-  delta: DragDelta
-) {
+async function dragLocatorBy(page: Page, locator: Locator, delta: DragDelta) {
   await locator.scrollIntoViewIfNeeded();
   const box = await getRequiredBox(locator);
   const startX = box.x + box.width / 2;
@@ -152,7 +148,9 @@ function parseCardData(text: string): CardDataSnapshot[] {
 }
 
 async function getCardData(page: Page): Promise<CardDataSnapshot[]> {
-  return parseCardData(await page.locator('[data-card-data-content]').innerText());
+  return parseCardData(
+    await page.locator('[data-card-data-content]').innerText()
+  );
 }
 
 function getCardDataById(
@@ -188,7 +186,9 @@ function expectNoParent(card: CardDataSnapshot) {
   expect(Object.hasOwn(card, 'parent')).toBe(false);
 }
 
-async function createPositionedHierarchy(page: Page): Promise<HierarchyCardIds> {
+async function createPositionedHierarchy(
+  page: Page
+): Promise<HierarchyCardIds> {
   const firstNewCardIndex = (await page.locator('[data-card-id]').count()) + 1;
   const parentId = `card-${firstNewCardIndex}`;
   const childId = `card-${firstNewCardIndex + 1}`;
@@ -198,7 +198,9 @@ async function createPositionedHierarchy(page: Page): Promise<HierarchyCardIds> 
   await setFreeChildrenLayout(page, [parentId]);
   await dragLocatorBy(
     page,
-    page.locator(`[data-card-id="${parentId}"] .cards-card-canvas__card-header`),
+    page.locator(
+      `[data-card-id="${parentId}"] .cards-card-canvas__card-header`
+    ),
     { x: 520, y: 300 }
   );
 
@@ -285,7 +287,11 @@ async function dragCardCenterToPoint(
  * point, leaving the mouse button held down. Use this when you need to assert
  * state *during* a drag before releasing.
  */
-async function dragHandleToPoint(page: Page, handle: Locator, target: DragPoint) {
+async function dragHandleToPoint(
+  page: Page,
+  handle: Locator,
+  target: DragPoint
+) {
   await handle.scrollIntoViewIfNeeded();
   const handleBox = await getRequiredBox(handle);
   const handleCenter = {
@@ -387,7 +393,9 @@ test.describe('CardCanvas select-on-add toggle', () => {
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       'card-1'
     );
-    await expect(page.locator('[data-testid="delete-selected-card"]')).toBeEnabled();
+    await expect(
+      page.locator('[data-testid="delete-selected-card"]')
+    ).toBeEnabled();
 
     const cardData = await getCardData(page);
     const firstCard = getCardDataById(cardData, 'card-1');
@@ -425,7 +433,9 @@ test.describe('CardCanvas select-on-add toggle', () => {
     await addCard(page, 'Card A', 'Content A');
 
     const firstCard = page.locator('[data-card-id="card-1"]');
-    await expect(firstCard).not.toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(firstCard).not.toHaveClass(
+      /cards-card-canvas__card--selected/
+    );
     await expect(
       page.locator('.cards-card-canvas__card--selected')
     ).toHaveCount(0);
@@ -440,9 +450,9 @@ test.describe('CardCanvas select-on-add toggle', () => {
     await addCard(page, 'Card B', 'Content B');
 
     await expect(firstCard).toHaveClass(/cards-card-canvas__card--selected/);
-    await expect(
-      page.locator('[data-card-id="card-2"]')
-    ).not.toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(page.locator('[data-card-id="card-2"]')).not.toHaveClass(
+      /cards-card-canvas__card--selected/
+    );
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       'card-1'
     );
@@ -548,8 +558,14 @@ test.describe('CardCanvas selection', () => {
 
     const contentBoxAfter = await secondCardContent.boundingBox();
     const requiredContentBoxAfter = expectNotNull(contentBoxAfter);
-    expect(requiredContentBoxAfter.width).toBeCloseTo(requiredContentBoxBefore.width, 0.5);
-    expect(requiredContentBoxAfter.height).toBeCloseTo(requiredContentBoxBefore.height, 0.5);
+    expect(requiredContentBoxAfter.width).toBeCloseTo(
+      requiredContentBoxBefore.width,
+      0.5
+    );
+    expect(requiredContentBoxAfter.height).toBeCloseTo(
+      requiredContentBoxBefore.height,
+      0.5
+    );
   });
 
   test('does not clear selection when clicking the settings panel', async ({
@@ -786,6 +802,23 @@ test.describe('CardCanvas custom rendering and options', () => {
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       'card-1'
     );
+    await expect(page.locator('[data-card-select-count]')).toHaveText('1');
+  });
+
+  test('does not select a moved card when selectOnMoveEnd is disabled', async ({
+    page,
+  }) => {
+    // Given: neither card creation nor drag completion is configured to select.
+    await disableOption(page, '[data-card-select-new-card-toggle]');
+    await addCard(page, 'Card A', 'Content A');
+
+    const { card, header } = getCardParts(page);
+
+    await dragLocatorBy(page, header, { x: 80, y: 40 });
+
+    await expect(card).not.toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+    await expect(page.locator('[data-card-select-count]')).toHaveText('0');
   });
 
   test('does not select a card when resizing ends and selectOnMoveEnd is enabled', async ({
@@ -820,7 +853,9 @@ test.describe('CardCanvas custom rendering and options', () => {
     await expect(content).toBeVisible();
   });
 
-  test('renders resize handles without an explicit z-index', async ({ page }) => {
+  test('renders resize handles without an explicit z-index', async ({
+    page,
+  }) => {
     await addCard(page, 'Card A', 'Content A');
 
     const { handle } = getCardParts(page);
@@ -983,7 +1018,9 @@ test.describe('CardCanvas interactions', () => {
 
     await dragLocatorBy(
       page,
-      page.locator(`[data-card-id="${hierarchyIds.parentId}"] [data-card-resize-handle]`),
+      page.locator(
+        `[data-card-id="${hierarchyIds.parentId}"] [data-card-resize-handle]`
+      ),
       { x: 60, y: 30 }
     );
 
@@ -1012,7 +1049,9 @@ test.describe('CardCanvas interactions', () => {
     await dragCardCenterTo(page, { card: card2, handle: header2 }, card1);
 
     await expect(card1).toHaveAttribute('data-parent-candidate', 'true');
-    await expect(card1).toHaveClass(/cards-card-canvas__card--parent-candidate/);
+    await expect(card1).toHaveClass(
+      /cards-card-canvas__card--parent-candidate/
+    );
 
     await page.mouse.up();
 
@@ -1037,7 +1076,9 @@ test.describe('CardCanvas interactions', () => {
     await expect(card2).not.toHaveAttribute('data-parent-candidate');
   });
 
-  test('overlapping candidates choose highest zIndex then later array order', async ({ page }) => {
+  test('overlapping candidates choose highest zIndex then later array order', async ({
+    page,
+  }) => {
     await addCard(page, 'Card 2', 'Content');
     await setFreeChildrenLayout(page, ['card-1', 'card-2']);
 
@@ -1049,7 +1090,10 @@ test.describe('CardCanvas interactions', () => {
     const box1 = await getRequiredBox(card1);
     const box2 = await getRequiredBox(card2);
 
-    await dragLocatorBy(page, header2, { x: box1.x - box2.x, y: box1.y - box2.y });
+    await dragLocatorBy(page, header2, {
+      x: box1.x - box2.x,
+      y: box1.y - box2.y,
+    });
 
     await addCard(page, 'Card 3', 'Content');
     const card3 = page.locator('[data-card-id="card-3"]');
@@ -1065,7 +1109,9 @@ test.describe('CardCanvas interactions', () => {
     await page.mouse.up();
   });
 
-  test('attach parent: drag B center into A and release writes B parent', async ({ page }) => {
+  test('attach parent: drag B center into A and release writes B parent', async ({
+    page,
+  }) => {
     await addCard(page, 'Card B', 'Content B');
     await setFreeChildrenLayout(page, ['card-1']);
 
@@ -1087,7 +1133,9 @@ test.describe('CardCanvas interactions', () => {
     expect(afterB.y).toBeCloseTo(duringDragB.y, 5);
   });
 
-  test('detach parent: drag B from inside A out to empty space removes parent property', async ({ page }) => {
+  test('detach parent: drag B from inside A out to empty space removes parent property', async ({
+    page,
+  }) => {
     await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
 
     const cardB = page.locator('[data-card-id="card-2"]');
@@ -1104,7 +1152,9 @@ test.describe('CardCanvas interactions', () => {
     expectCardMovedBy(beforeB, cardAfterDetach, delta);
   });
 
-  test('re-parent: drag B from A into C updates B parent to C', async ({ page }) => {
+  test('re-parent: drag B from A into C updates B parent to C', async ({
+    page,
+  }) => {
     await setFreeChildrenLayout(page, ['card-1']);
     await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
     await addCard(page, 'Card C', 'Content C');
@@ -1127,7 +1177,9 @@ test.describe('CardCanvas interactions', () => {
     expect(afterB.y).toBeCloseTo(duringDragB.y, 5);
   });
 
-  test('prevent cycle: dragging A over its descendant keeps A without parent', async ({ page }) => {
+  test('prevent cycle: dragging A over its descendant keeps A without parent', async ({
+    page,
+  }) => {
     await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
 
     const cardA = page.locator('[data-card-id="card-1"]');
@@ -1146,7 +1198,9 @@ test.describe('CardCanvas interactions', () => {
     expect(getCardDataById(cards, 'card-2').parent).toBe('card-1');
   });
 
-  test('attach parent: overlapping candidates choose zIndex winner on release', async ({ page }) => {
+  test('attach parent: overlapping candidates choose zIndex winner on release', async ({
+    page,
+  }) => {
     await addCard(page, 'Card 2', 'Content');
     await setFreeChildrenLayout(page, ['card-1', 'card-2']);
 
@@ -1156,7 +1210,10 @@ test.describe('CardCanvas interactions', () => {
     const box1 = await getRequiredBox(card1);
     const box2 = await getRequiredBox(card2);
 
-    await dragLocatorBy(page, header2, { x: box1.x - box2.x, y: box1.y - box2.y });
+    await dragLocatorBy(page, header2, {
+      x: box1.x - box2.x,
+      y: box1.y - box2.y,
+    });
 
     await addCard(page, 'Card 3', 'Content');
     const card3 = page.locator('[data-card-id="card-3"]');
@@ -1313,7 +1370,9 @@ test.describe('CardCanvas pointer-based parent grouping', () => {
     await dragHandleToPoint(page, header2, pointerTarget);
 
     await expect(card1).toHaveAttribute('data-parent-candidate', 'true');
-    await expect(card1).toHaveClass(/cards-card-canvas__card--parent-candidate/);
+    await expect(card1).toHaveClass(
+      /cards-card-canvas__card--parent-candidate/
+    );
 
     await page.mouse.up();
   });
@@ -1340,7 +1399,9 @@ test.describe('CardCanvas pointer-based parent grouping', () => {
     await dragHandleToPoint(page, header2, pointerTarget);
 
     await expect(card1).not.toHaveAttribute('data-parent-candidate');
-    await expect(card1).not.toHaveClass(/cards-card-canvas__card--parent-candidate/);
+    await expect(card1).not.toHaveClass(
+      /cards-card-canvas__card--parent-candidate/
+    );
 
     await page.mouse.up();
   });
@@ -1411,8 +1472,13 @@ test.describe('CardCanvas hierarchy regressions', () => {
     const beforeCards = await getCardData(page);
     const beforeParent = getCardDataById(beforeCards, hierarchyIds.parentId);
     const beforeChild = getCardDataById(beforeCards, hierarchyIds.childId);
-    const beforeGrandchild = getCardDataById(beforeCards, hierarchyIds.grandchildId);
-    const parentCard = page.locator(`[data-card-id="${hierarchyIds.parentId}"]`);
+    const beforeGrandchild = getCardDataById(
+      beforeCards,
+      hierarchyIds.grandchildId
+    );
+    const parentCard = page.locator(
+      `[data-card-id="${hierarchyIds.parentId}"]`
+    );
     const parentHandle = parentCard.locator('[data-card-resize-handle]');
 
     await expect(parentHandle).toBeHidden();
@@ -1425,7 +1491,10 @@ test.describe('CardCanvas hierarchy regressions', () => {
     const afterCards = await getCardData(page);
     const afterParent = getCardDataById(afterCards, hierarchyIds.parentId);
     const afterChild = getCardDataById(afterCards, hierarchyIds.childId);
-    const afterGrandchild = getCardDataById(afterCards, hierarchyIds.grandchildId);
+    const afterGrandchild = getCardDataById(
+      afterCards,
+      hierarchyIds.grandchildId
+    );
 
     expectCardPositionUnchanged(beforeParent, afterParent);
     expectCardPositionUnchanged(beforeChild, afterChild);
@@ -1447,7 +1516,10 @@ test.describe('CardCanvas hierarchy regressions', () => {
     const beforeCards = await getCardData(page);
     const beforeParent = getCardDataById(beforeCards, hierarchyIds.parentId);
     const beforeChild = getCardDataById(beforeCards, hierarchyIds.childId);
-    const beforeGrandchild = getCardDataById(beforeCards, hierarchyIds.grandchildId);
+    const beforeGrandchild = getCardDataById(
+      beforeCards,
+      hierarchyIds.grandchildId
+    );
     const delta = { x: 80, y: 40 };
 
     await dragLocatorBy(
@@ -1460,7 +1532,10 @@ test.describe('CardCanvas hierarchy regressions', () => {
 
     const afterCards = await getCardData(page);
     const afterChild = getCardDataById(afterCards, hierarchyIds.childId);
-    const afterGrandchild = getCardDataById(afterCards, hierarchyIds.grandchildId);
+    const afterGrandchild = getCardDataById(
+      afterCards,
+      hierarchyIds.grandchildId
+    );
 
     expectCardMovedBy(
       beforeParent,
@@ -1482,7 +1557,10 @@ test.describe('CardCanvas hierarchy regressions', () => {
 
     const beforeCards = await getCardData(page);
     const beforeChild = getCardDataById(beforeCards, hierarchyIds.childId);
-    const beforeGrandchild = getCardDataById(beforeCards, hierarchyIds.grandchildId);
+    const beforeGrandchild = getCardDataById(
+      beforeCards,
+      hierarchyIds.grandchildId
+    );
     const selectCountBefore = Number.parseInt(
       await page.locator('[data-card-select-count]').innerText(),
       10
@@ -1499,7 +1577,10 @@ test.describe('CardCanvas hierarchy regressions', () => {
 
     const afterCards = await getCardData(page);
     const afterChild = getCardDataById(afterCards, hierarchyIds.childId);
-    const afterGrandchild = getCardDataById(afterCards, hierarchyIds.grandchildId);
+    const afterGrandchild = getCardDataById(
+      afterCards,
+      hierarchyIds.grandchildId
+    );
 
     expectCardMovedBy(beforeChild, afterChild, delta);
     expectCardMovedBy(beforeGrandchild, afterGrandchild, delta);
@@ -1539,7 +1620,9 @@ test.describe('CardCanvas hierarchy regressions', () => {
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       hierarchyIds.parentId
     );
-    await expect(childCard).not.toHaveClass(/cards-card-canvas__card--selected/);
+    await expect(childCard).not.toHaveClass(
+      /cards-card-canvas__card--selected/
+    );
   });
 
   test('keeps resize independent from parent attachment and child movement', async ({
@@ -1552,8 +1635,13 @@ test.describe('CardCanvas hierarchy regressions', () => {
     const beforeCards = await getCardData(page);
     const beforeParent = getCardDataById(beforeCards, hierarchyIds.parentId);
     const beforeChild = getCardDataById(beforeCards, hierarchyIds.childId);
-    const beforeGrandchild = getCardDataById(beforeCards, hierarchyIds.grandchildId);
-    const parentCard = page.locator(`[data-card-id="${hierarchyIds.parentId}"]`);
+    const beforeGrandchild = getCardDataById(
+      beforeCards,
+      hierarchyIds.grandchildId
+    );
+    const parentCard = page.locator(
+      `[data-card-id="${hierarchyIds.parentId}"]`
+    );
 
     await dragLocatorBy(page, parentCard.locator('[data-card-resize-handle]'), {
       x: 60,
@@ -1563,7 +1651,10 @@ test.describe('CardCanvas hierarchy regressions', () => {
     const afterCards = await getCardData(page);
     const afterParent = getCardDataById(afterCards, hierarchyIds.parentId);
     const afterChild = getCardDataById(afterCards, hierarchyIds.childId);
-    const afterGrandchild = getCardDataById(afterCards, hierarchyIds.grandchildId);
+    const afterGrandchild = getCardDataById(
+      afterCards,
+      hierarchyIds.grandchildId
+    );
 
     expect(afterParent.width).toBeCloseTo(beforeParent.width + 60, 5);
     expect(afterParent.height).toBeCloseTo(beforeParent.height + 30, 5);
@@ -1581,7 +1672,9 @@ test.describe('CardCanvas Delete Selected', () => {
     await page.goto('/');
   });
 
-  test('leaf delete: select a single card, click delete, assert card gone and selection cleared', async ({ page }) => {
+  test('leaf delete: select a single card, click delete, assert card gone and selection cleared', async ({
+    page,
+  }) => {
     await addCard(page, 'Card A', 'Content A');
     await addCard(page, 'Card B', 'Content B');
 
@@ -1594,7 +1687,9 @@ test.describe('CardCanvas Delete Selected', () => {
     const header2 = secondCard.locator('.cards-card-canvas__card-header');
     await dragLocatorBy(page, header2, { x: 300, y: 0 });
 
-    await firstCard.locator('.cards-card-canvas__card-content').dispatchEvent('click');
+    await firstCard
+      .locator('.cards-card-canvas__card-content')
+      .dispatchEvent('click');
     await expect(firstCard).toHaveClass(/cards-card-canvas__card--selected/);
 
     await page.getByTestId('delete-selected-card').click();
@@ -1604,20 +1699,26 @@ test.describe('CardCanvas Delete Selected', () => {
     await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
   });
 
-  test('parent cascade with dialog accept: create A with child B, select A, accept confirm, assert A/B gone and unrelated card remains', async ({ page }) => {
+  test('parent cascade with dialog accept: create A with child B, select A, accept confirm, assert A/B gone and unrelated card remains', async ({
+    page,
+  }) => {
     await addCard(page, 'Card A', 'Content A');
     await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
 
     const cardA = page.locator('[data-card-id="card-1"]');
     const cardB = page.locator('[data-card-id="card-2"]');
 
-    await cardA.locator('.cards-card-canvas__card-content').dispatchEvent('click');
+    await cardA
+      .locator('.cards-card-canvas__card-content')
+      .dispatchEvent('click');
     await expect(cardA).toHaveClass(/cards-card-canvas__card--selected/);
 
     await disableOption(page, '[data-card-select-new-card-toggle]');
     await addCard(page, 'Card C', 'Content C');
     const cardC = page.locator('[data-card-id="card-3"]');
-    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
 
     page.once('dialog', async (dialog) => {
       expect(dialog.message()).toBe('Delete this card and its child cards?');
@@ -1632,14 +1733,18 @@ test.describe('CardCanvas Delete Selected', () => {
     await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
   });
 
-  test('parent delete abort with dialog dismiss: same setup, dismiss confirm, assert A/B and selection unchanged', async ({ page }) => {
+  test('parent delete abort with dialog dismiss: same setup, dismiss confirm, assert A/B and selection unchanged', async ({
+    page,
+  }) => {
     await addCard(page, 'Card A', 'Content A');
     await addCardWithParent(page, 'card-1', 'Card B', 'Content B');
 
     const cardA = page.locator('[data-card-id="card-1"]');
     const cardB = page.locator('[data-card-id="card-2"]');
 
-    await cardA.locator('.cards-card-canvas__card-content').dispatchEvent('click');
+    await cardA
+      .locator('.cards-card-canvas__card-content')
+      .dispatchEvent('click');
     await expect(cardA).toHaveClass(/cards-card-canvas__card--selected/);
 
     page.once('dialog', async (dialog) => {
@@ -1651,15 +1756,21 @@ test.describe('CardCanvas Delete Selected', () => {
     await expect(cardA).toBeVisible();
     await expect(cardB).toBeVisible();
 
-    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
   });
 
-  test('selection cleanup after successful delete: assert data-card-selected-display reflects cleared selection', async ({ page }) => {
+  test('selection cleanup after successful delete: assert data-card-selected-display reflects cleared selection', async ({
+    page,
+  }) => {
     await addCard(page, 'Card A', 'Content A');
     const firstCard = page.locator('[data-card-id="card-1"]');
 
     await firstCard.locator('.cards-card-canvas__card-content').click();
-    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
 
     await page.getByTestId('delete-selected-card').click();
 
