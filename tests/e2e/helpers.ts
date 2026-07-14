@@ -161,7 +161,7 @@ function isStringArray(value: unknown): value is readonly string[] {
 function isCardChildrenLayoutMode(
   value: unknown
 ): value is CardChildrenLayoutMode {
-  return value === 'free' || value === 'mind-map-horizontal';
+  return value === 'free' || value === 'mind-map-horizontal' || value === 'arrange';
 }
 
 function isCardDataSnapshot(value: unknown): value is CardDataSnapshot {

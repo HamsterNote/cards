@@ -121,12 +121,14 @@ test.describe('normalizeMindMapLayout utility', () => {
         height: 120,
         childrenLayoutMode: 'mind-map-horizontal',
       },
+      // 显式指定 free 模式，否则默认 arrange 会重新排列后代卡片
       {
         ...makeCard('free-child', 'root'),
         x: 500,
         y: 500,
         width: 100,
         height: 80,
+        childrenLayoutMode: 'free' as const,
       },
       {
         ...makeCard('descendant', 'free-child'),
@@ -223,9 +225,9 @@ test.describe('normalizeMindMapLayout utility', () => {
   });
 
   test('returns equivalent coordinates for empty and free-mode collections', () => {
-    // Given: no cards and a free-mode hierarchy.
+    // Given: no cards and a free-mode hierarchy (explicit 'free' to test non-default mode).
     const freeCards = freezeCards([
-      { ...makeCard('root'), x: 10, y: 20 },
+      { ...makeCard('root'), x: 10, y: 20, childrenLayoutMode: 'free' },
       { ...makeCard('child', 'root'), x: 30, y: 40 },
     ]);
 
@@ -238,7 +240,7 @@ test.describe('normalizeMindMapLayout utility', () => {
     expect(freeResult).toEqual(freeCards);
   });
 
-  test('normalizes missing child layout mode to free', () => {
+  test('normalizes missing child layout mode to arrange', () => {
     // Given: cards with absent and explicit layout modes.
     const missingModeCard = makeCard('missing');
     const freeModeCard = {
@@ -249,11 +251,213 @@ test.describe('normalizeMindMapLayout utility', () => {
       ...makeCard('mind-map'),
       childrenLayoutMode: 'mind-map-horizontal',
     } satisfies CardCanvasCard;
+    const arrangeModeCard = {
+      ...makeCard('arrange'),
+      childrenLayoutMode: 'arrange',
+    } satisfies CardCanvasCard;
 
     // When / Then: the helper returns the effective mode.
-    expect(getMindMapLayoutMode(missingModeCard)).toBe('free');
+    expect(getMindMapLayoutMode(missingModeCard)).toBe('arrange');
     expect(getMindMapLayoutMode(freeModeCard)).toBe('free');
     expect(getMindMapLayoutMode(mindMapCard)).toBe('mind-map-horizontal');
+    expect(getMindMapLayoutMode(arrangeModeCard)).toBe('arrange');
+  });
+});
+
+test.describe('normalizeMindMapLayout — arrange mode', () => {
+  test('places a single child at content-area top-left and expands parent height', () => {
+    // Given: an arrange parent with one child.
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        x: 0,
+        y: 0,
+        width: 180,
+        height: 120,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('c1', 'root'), width: 120, height: 80 },
+    ]);
+
+    // When: normalization runs.
+    const result = normalizeMindMapLayout(cards);
+
+    // Then: child is at (contentLeft=13, contentTop=50) and parent height grows.
+    expect(result.find((c) => c.id === 'c1')).toMatchObject({ x: 13, y: 50 });
+    expect(result.find((c) => c.id === 'root')?.height).toBe(143);
+  });
+
+  test('places two children side by side in array order', () => {
+    // Given: a wide arrange parent with two children.
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 120,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('c1', 'root'), width: 120, height: 80 },
+      { ...makeCard('c2', 'root'), width: 120, height: 80 },
+    ]);
+
+    const result = normalizeMindMapLayout(cards);
+
+    // c1 at (13, 50); c2 at (13+120+12=145, 50)
+    expect(result.find((c) => c.id === 'c1')).toMatchObject({ x: 13, y: 50 });
+    expect(result.find((c) => c.id === 'c2')).toMatchObject({ x: 145, y: 50 });
+  });
+
+  test('wraps third child to a new row when it exceeds content width', () => {
+    // Given: a narrow arrange parent (width=300 → contentRight=287) with three children.
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 120,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('c1', 'root'), width: 120, height: 80 },
+      { ...makeCard('c2', 'root'), width: 120, height: 80 },
+      { ...makeCard('c3', 'root'), width: 120, height: 80 },
+    ]);
+
+    const result = normalizeMindMapLayout(cards);
+
+    // c1 (13,50), c2 (145,50); c3 wraps to (13, 50+80+12=142)
+    expect(result.find((c) => c.id === 'c1')).toMatchObject({ x: 13, y: 50 });
+    expect(result.find((c) => c.id === 'c2')).toMatchObject({ x: 145, y: 50 });
+    expect(result.find((c) => c.id === 'c3')).toMatchObject({ x: 13, y: 142 });
+    // parent height expands to 235
+    expect(result.find((c) => c.id === 'root')?.height).toBe(235);
+  });
+
+  test('appends a new child after existing children when added to array end', () => {
+    // Given: an arrange parent with one already-normalized child.
+    const initial = normalizeMindMapLayout(
+      freezeCards([
+        {
+          ...makeCard('root'),
+          x: 0,
+          y: 0,
+          width: 400,
+          height: 120,
+          childrenLayoutMode: 'arrange',
+        },
+        { ...makeCard('c1', 'root'), width: 120, height: 80 },
+      ])
+    );
+
+    // When: a new child is appended to the end of the array and normalized.
+    const newCard = { ...makeCard('c2', 'root'), width: 120, height: 80 };
+    const result = normalizeMindMapLayout([...initial, newCard]);
+
+    // Then: c1 stays at its slot and c2 is placed after c1.
+    expect(result.find((c) => c.id === 'c1')).toMatchObject({ x: 13, y: 50 });
+    expect(result.find((c) => c.id === 'c2')).toMatchObject({ x: 145, y: 50 });
+  });
+
+  test('does not mutate frozen input cards', () => {
+    // Given: frozen arrange cards.
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        x: 0,
+        y: 0,
+        width: 180,
+        height: 120,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('c1', 'root'), x: 999, y: 999, width: 120, height: 80 },
+    ]);
+    const before = snapshotCards(cards);
+
+    const result = normalizeMindMapLayout(cards);
+
+    expectCardsUnchanged(cards, before);
+    expect(result).not.toBe(cards);
+    expect(result.find((c) => c.id === 'c1')).toMatchObject({ x: 13, y: 50 });
+  });
+
+  test('uses a nested arrange child final size when placing its next sibling', () => {
+    // Given: the first child expands vertically while arranging its own children.
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        width: 300,
+        height: 120,
+        childrenLayoutMode: 'arrange',
+      },
+      {
+        ...makeCard('nested', 'root'),
+        width: 120,
+        height: 80,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('sibling', 'root'), width: 120, height: 80 },
+      { ...makeCard('nested-child', 'nested'), width: 120, height: 160 },
+    ]);
+
+    // When: both arrange levels are normalized.
+    const result = normalizeMindMapLayout(cards);
+
+    // Then: the sibling wraps below the expanded nested card instead of overlapping it.
+    expect(result.find((card) => card.id === 'nested')).toMatchObject({
+      x: 13,
+      y: 50,
+      height: 223,
+    });
+    expect(result.find((card) => card.id === 'sibling')).toMatchObject({
+      x: 13,
+      y: 285,
+    });
+  });
+
+  test('wraps a nested arrange child after its own layout expands its width', () => {
+    // Given: a preceding sibling leaves enough room for the nested card's stale width only.
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        width: 400,
+        height: 120,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('first', 'root'), width: 120, height: 80 },
+      {
+        ...makeCard('nested', 'root'),
+        width: 120,
+        height: 80,
+        childrenLayoutMode: 'arrange',
+      },
+      { ...makeCard('nested-child', 'nested'), width: 300, height: 80 },
+    ]);
+
+    // When: nested layout expands the second child's width during normalization.
+    const result = normalizeMindMapLayout(cards);
+
+    // Then: the expanded child wraps in the same pass and stays inside root content bounds.
+    expect(result.find((card) => card.id === 'nested')).toMatchObject({
+      x: 13,
+      y: 142,
+      width: 326,
+    });
+  });
+
+  test('leaves free-mode and empty collections unchanged', () => {
+    // Given: no cards and a free-mode hierarchy (explicit 'free' to test non-default mode).
+    const freeCards = freezeCards([
+      { ...makeCard('root'), x: 10, y: 20, childrenLayoutMode: 'free' },
+      { ...makeCard('child', 'root'), x: 30, y: 40 },
+    ]);
+
+    const emptyResult = normalizeMindMapLayout([]);
+    const freeResult = normalizeMindMapLayout(freeCards);
+
+    expect(emptyResult).toEqual([]);
+    expect(freeResult).toEqual(freeCards);
   });
 
   test('normalizes card patches only when layout fields change', () => {

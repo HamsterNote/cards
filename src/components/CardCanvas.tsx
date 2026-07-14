@@ -11,7 +11,11 @@ import {
 } from '../utils/card-layout';
 import './CardCanvas.css';
 
-export type CardChildrenLayoutMode = 'free' | 'mind-map-horizontal';
+// 子卡布局模式：
+// - 'free'：自由放置，子卡片可在任意位置
+// - 'mind-map-horizontal'：导图横向布局，子卡片在父卡右侧垂直居中排列
+// - 'arrange'：排列布局，子卡片在父卡内容区内从左到右、从上到下流式排列
+export type CardChildrenLayoutMode = 'free' | 'mind-map-horizontal' | 'arrange';
 
 /** 卡片数据模型 */
 export interface CardCanvasCard {
@@ -101,7 +105,7 @@ interface LinkDragInfo {
   readonly targetCardId: string | undefined;
 }
 
-function hasCardCoordinateChanges(
+function hasCardGeometryChanges(
   currentCards: readonly CardCanvasCard[],
   nextCards: readonly CardCanvasCard[]
 ): boolean {
@@ -115,7 +119,9 @@ function hasCardCoordinateChanges(
       nextCard === undefined ||
       card.id !== nextCard.id ||
       card.x !== nextCard.x ||
-      card.y !== nextCard.y
+      card.y !== nextCard.y ||
+      card.width !== nextCard.width ||
+      card.height !== nextCard.height
     );
   });
 }
@@ -170,7 +176,7 @@ export function CardCanvas({
 
   useEffect(() => {
     const normalizedCards = normalizeMindMapLayout(cards);
-    if (hasCardCoordinateChanges(cards, normalizedCards)) {
+    if (hasCardGeometryChanges(cards, normalizedCards)) {
       onCardsChangeRef.current?.(normalizedCards);
     }
   }, [cards]);

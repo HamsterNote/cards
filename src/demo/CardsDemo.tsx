@@ -323,8 +323,9 @@ export function Demo() {
                   <span data-card-rendered-content>{content}</span>
                 )}
                 renderPopover={(card, set) => {
+                  // 默认显示为 'arrange'（排列），与 getMindMapLayoutMode 保持一致
                   const currentLayoutMode: CardChildrenLayoutMode =
-                    card.childrenLayoutMode ?? 'free';
+                    card.childrenLayoutMode ?? 'arrange';
                   return (
                     <div
                       className="card-canvas-demo-popover-content"
@@ -374,7 +375,9 @@ export function Demo() {
                           const nextMode: CardChildrenLayoutMode =
                             event.target.value === 'mind-map-horizontal'
                               ? 'mind-map-horizontal'
-                              : 'free';
+                              : event.target.value === 'arrange'
+                                ? 'arrange'
+                                : 'free';
                           set({ childrenLayoutMode: nextMode });
                         }}
                         style={{
@@ -387,6 +390,7 @@ export function Demo() {
                         <option value="mind-map-horizontal">
                           Mind-map horizontal
                         </option>
+                        <option value="arrange">Arrange</option>
                       </select>
                     </div>
                   );

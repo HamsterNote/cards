@@ -7,6 +7,18 @@ export const MIND_MAP_HORIZONTAL_GAP = 48;
 export const MIND_MAP_VERTICAL_GAP = 24;
 export const MIND_MAP_DETACH_THRESHOLD = 48;
 
+// arrange（排列）布局相关常量
+// 子卡片之间的水平间距
+export const ARRANGE_HORIZONTAL_GAP = 12;
+// 行间距（换行后的垂直间距）
+export const ARRANGE_VERTICAL_GAP = 12;
+// 父卡片 content 区域相对左上角的 inset 默认值
+// （实际运行时由 measureContentInset 测量得到，此处仅用作归一化的静态默认值）
+const ARRANGE_CONTENT_LEFT = 13;
+const ARRANGE_CONTENT_TOP = 50;
+const ARRANGE_CONTENT_RIGHT = 13;
+const ARRANGE_CONTENT_BOTTOM = 13;
+
 type CardPoint = {
   readonly x: number;
   readonly y: number;
@@ -24,7 +36,8 @@ function normalizeParentId(parent: string | undefined): string | undefined {
 export function getMindMapLayoutMode(
   card: CardCanvasCard
 ): CardChildrenLayoutMode {
-  return card.childrenLayoutMode ?? 'free';
+  // 默认布局模式为 'arrange'（排列），子卡片在父卡内容区内流式排列
+  return card.childrenLayoutMode ?? 'arrange';
 }
 
 export function shouldNormalizeMindMapAfterCardUpdate(
@@ -237,6 +250,108 @@ function normalizeParentLayout(
   }
 }
 
+function normalizeArrangeParentLayout(
+  context: LayoutContext,
+  parentId: string,
+  visitingIds: ReadonlySet<string>
+): void {
+  const parent = context.cardById.get(parentId);
+  if (parent === undefined || getMindMapLayoutMode(parent) !== 'arrange') {
+    return;
+  }
+
+  const childIds = getCardChildren(context, parentId);
+  if (childIds.length === 0) {
+    return;
+  }
+
+  const contentLeft = parent.x + ARRANGE_CONTENT_LEFT;
+  const contentTop = parent.y + ARRANGE_CONTENT_TOP;
+  const contentRight = parent.x + parent.width - ARRANGE_CONTENT_RIGHT;
+
+  let cursorX = contentLeft;
+  let cursorY = contentTop;
+  let rowMaxHeight = 0;
+  let maxBottom = contentTop;
+
+  for (const childId of childIds) {
+    if (visitingIds.has(childId)) {
+      continue;
+    }
+
+    const child = context.cardById.get(childId);
+    if (child === undefined) {
+      continue;
+    }
+
+    // 当前行放不下且当前行已有卡片 → 换行到下一行
+    if (cursorX + child.width > contentRight && cursorX > contentLeft) {
+      cursorX = contentLeft;
+      cursorY += rowMaxHeight + ARRANGE_VERTICAL_GAP;
+      rowMaxHeight = 0;
+    }
+
+    // 移动子卡片及其后代到目标位置（保持后代相对偏移不变）
+    const targetX = cursorX;
+    const targetY = cursorY;
+    const deltaX = targetX - child.x;
+    const deltaY = targetY - child.y;
+    if (deltaX !== 0 || deltaY !== 0) {
+      moveCardTree(context, childId, { x: deltaX, y: deltaY });
+    }
+
+    // 递归归一化子卡片的布局（如果子卡片本身也是 arrange 或 mind-map parent）
+    const movedChild = context.cardById.get(childId);
+    if (movedChild !== undefined) {
+      const nextVisitingIds = new Set(visitingIds);
+      nextVisitingIds.add(childId);
+      if (getMindMapLayoutMode(movedChild) === 'arrange') {
+        normalizeArrangeParentLayout(context, childId, nextVisitingIds);
+      } else if (getMindMapLayoutMode(movedChild) === 'mind-map-horizontal') {
+        normalizeParentLayout(context, childId, nextVisitingIds);
+      }
+    }
+
+    let normalizedChild = context.cardById.get(childId) ?? child;
+    if (
+      cursorX + normalizedChild.width > contentRight &&
+      cursorX > contentLeft
+    ) {
+      cursorX = contentLeft;
+      cursorY += rowMaxHeight + ARRANGE_VERTICAL_GAP;
+      rowMaxHeight = 0;
+      moveCardTree(context, childId, {
+        x: cursorX - normalizedChild.x,
+        y: cursorY - normalizedChild.y,
+      });
+      normalizedChild = context.cardById.get(childId) ?? normalizedChild;
+    }
+    cursorX += normalizedChild.width + ARRANGE_HORIZONTAL_GAP;
+    rowMaxHeight = Math.max(rowMaxHeight, normalizedChild.height);
+    if (cursorY + rowMaxHeight > maxBottom) {
+      maxBottom = cursorY + rowMaxHeight;
+    }
+  }
+
+  // 扩展父卡片：高度按子卡片占据空间向下扩展；宽度按最宽单卡扩展
+  const requiredHeight = maxBottom + ARRANGE_CONTENT_BOTTOM - parent.y;
+  let maxWidth = 0;
+  for (const childId of childIds) {
+    const child = context.cardById.get(childId);
+    if (child !== undefined && child.width > maxWidth) {
+      maxWidth = child.width;
+    }
+  }
+  const requiredWidth = maxWidth + ARRANGE_CONTENT_LEFT + ARRANGE_CONTENT_RIGHT;
+  if (requiredHeight > parent.height || requiredWidth > parent.width) {
+    context.cardById.set(parentId, {
+      ...parent,
+      width: Math.max(parent.width, requiredWidth),
+      height: Math.max(parent.height, requiredHeight),
+    });
+  }
+}
+
 export function normalizeMindMapLayout(
   cards: readonly CardCanvasCard[]
 ): CardCanvasCard[] {
@@ -248,6 +363,12 @@ export function normalizeMindMapLayout(
   for (const card of cards) {
     if (getMindMapLayoutMode(card) === 'mind-map-horizontal') {
       normalizeParentLayout(context, card.id, new Set([card.id]));
+    }
+  }
+
+  for (const card of cards) {
+    if (getMindMapLayoutMode(card) === 'arrange') {
+      normalizeArrangeParentLayout(context, card.id, new Set([card.id]));
     }
   }
 

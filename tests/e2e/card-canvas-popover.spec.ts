@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { CARD_CANVAS_POPOVER_OVERLAY_ATTRIBUTE } from '../../src/utils/card-popover-interactions';
-import { addCard, getRequiredBox } from './helpers';
+import { addCard, getCardData, getCardDataById, getRequiredBox } from './helpers';
 
 async function clickBlankCanvas(page: Page): Promise<void> {
   const stageBox = await getRequiredBox(
@@ -64,6 +64,27 @@ test.describe('CardCanvas popover interactions', () => {
     await clickBlankCanvas(page);
     await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
     await expect(page.locator('.cards-card-canvas__popover')).toHaveCount(0);
+  });
+
+  test('allows choosing the Demo child layout select inside the popover', async ({
+    page,
+  }) => {
+    // Given: a selected card is showing the Demo-owned Popover controls.
+    await addCard(page, 'Card A', 'Content A');
+    const layoutSelect = page.locator('[data-card-children-layout-mode-select]');
+    await expect(layoutSelect).toBeVisible();
+    await expect(layoutSelect).toHaveValue('arrange');
+
+    // When: the native select is opened and changed through normal user input.
+    // 默认值是 'arrange'（最后一个选项），ArrowDown 不会循环，所以用 ArrowUp 上移到 'mind-map-horizontal'
+    await layoutSelect.click();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+
+    // Then: the chosen child-layout mode is written back to Demo card data.
+    await expect(layoutSelect).toHaveValue('mind-map-horizontal');
+    const card = getCardDataById(await getCardData(page), 'card-1');
+    expect(card.childrenLayoutMode).toBe('mind-map-horizontal');
   });
 
   test('keeps selection when clicking a marked portaled overlay from the popover', async ({
