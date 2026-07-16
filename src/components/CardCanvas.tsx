@@ -9,6 +9,7 @@ import {
   normalizeMindMapLayout,
   shouldNormalizeMindMapAfterCardUpdate,
 } from '../utils/card-layout';
+import type { CardsTheme } from '../theme';
 import './CardCanvas.css';
 
 // 子卡布局模式：
@@ -88,6 +89,8 @@ export interface CardCanvasProps {
   ) => ReactNode;
   /** 是否启用连线模式。默认 false。 */
   linkMode?: boolean;
+  /** 主题：light（默认）或 dark */
+  theme?: CardsTheme;
   /** 连线模式下，点击目标卡片时的回调 */
   onLinkClick?: (
     targetCard: CardCanvasCard,
@@ -146,6 +149,7 @@ export function CardCanvas({
   renderCardContent,
   renderPopover,
   linkMode: linkModeProp,
+  theme = 'light',
   onLinkClick,
 }: CardCanvasProps) {
   const linkMode = linkModeProp ?? false;
@@ -213,7 +217,10 @@ export function CardCanvas({
   );
 
   return (
-    <div className={`cards-card-canvas__wrapper ${className}`}>
+    <div
+      className={`cards-card-canvas__wrapper ${className}`}
+      data-theme={theme}
+    >
       <div className="cards-card-canvas__container">
         <svg
           className="cards-card-canvas__connectors"
