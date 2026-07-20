@@ -1,5 +1,6 @@
 export { Button } from './components/Button';
 export type { ButtonProps } from './components/Button';
+export type { CardsTheme } from './theme';
 export { CardCanvas } from './components/CardCanvas';
 export type {
   CardChildrenLayoutMode,

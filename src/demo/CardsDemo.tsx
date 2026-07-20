@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Button, CardCanvas, deleteCards } from '../index';
-import type { CardCanvasCard, CardChildrenLayoutMode } from '../index';
+import type {
+  CardCanvasCard,
+  CardChildrenLayoutMode,
+  CardsTheme,
+} from '../index';
 import { normalizeMindMapLayout } from '../utils/card-layout';
 
 type LastLinkResult = {
@@ -43,14 +47,19 @@ export function Demo() {
   const [selectEventCount, setSelectEventCount] = useState(0);
   const [newCardTitle, setNewCardTitle] = useState('');
   const [newCardContent, setNewCardContent] = useState('');
-  const [newCardTitleBg, setNewCardTitleBg] = useState('#f9fafb');
-  const [newCardContentBg, setNewCardContentBg] = useState('#ffffff');
+  const [newCardTitleBgOverride, setNewCardTitleBgOverride] = useState<
+    string | undefined
+  >();
+  const [newCardContentBgOverride, setNewCardContentBgOverride] = useState<
+    string | undefined
+  >();
   const [newCardParent, setNewCardParent] = useState('');
   const [requireSelectionToMoveResize, setRequireSelectionToMoveResize] =
     useState(false);
   const [selectOnMoveEnd, setSelectOnMoveEnd] = useState(false);
   const [selectNewCardOnAdd, setSelectNewCardOnAdd] = useState(true);
   const [linkMode, setLinkMode] = useState(false);
+  const [theme, setTheme] = useState<CardsTheme>('light');
   const [linkCallbackEnabled, setLinkCallbackEnabled] = useState(true);
   const [lastLinkResult, setLastLinkResult] = useState<LastLinkResult | null>(
     null
@@ -85,8 +94,12 @@ export function Demo() {
       width,
       height,
       zIndex: nextIndex,
-      titleStyle: { backgroundColor: newCardTitleBg },
-      contentStyle: { backgroundColor: newCardContentBg },
+      ...(newCardTitleBgOverride
+        ? { titleStyle: { backgroundColor: newCardTitleBgOverride } }
+        : {}),
+      ...(newCardContentBgOverride
+        ? { contentStyle: { backgroundColor: newCardContentBgOverride } }
+        : {}),
       ...(parentId ? { parent: parentId } : {}),
     };
 
@@ -141,7 +154,7 @@ export function Demo() {
   };
 
   return (
-    <main className="demo">
+    <main className="demo" data-theme={theme}>
       <header className="demo__header">
         <span className="demo__eyebrow">Component Library</span>
         <h1 className="demo__title">Cards</h1>
@@ -181,6 +194,7 @@ export function Demo() {
               data-card-add-button
               variant="filled"
               size="md"
+              theme={theme}
               onClick={handleAddCard}
             >
               Add Card
@@ -189,6 +203,7 @@ export function Demo() {
               data-testid="delete-selected-card"
               variant="filled"
               size="md"
+              theme={theme}
               disabled={selected.length === 0}
               onClick={handleDeleteSelected}
             >
@@ -200,8 +215,11 @@ export function Demo() {
                 id="card-title-bg"
                 data-card-title-bg-input
                 type="color"
-                value={newCardTitleBg}
-                onChange={(e) => setNewCardTitleBg(e.target.value)}
+                value={
+                  newCardTitleBgOverride ??
+                  (theme === 'dark' ? '#374151' : '#f9fafb')
+                }
+                onChange={(e) => setNewCardTitleBgOverride(e.target.value)}
               />
             </div>
             <div className="demo__form-group">
@@ -210,8 +228,11 @@ export function Demo() {
                 id="card-content-bg"
                 data-card-content-bg-input
                 type="color"
-                value={newCardContentBg}
-                onChange={(e) => setNewCardContentBg(e.target.value)}
+                value={
+                  newCardContentBgOverride ??
+                  (theme === 'dark' ? '#1f2937' : '#ffffff')
+                }
+                onChange={(e) => setNewCardContentBgOverride(e.target.value)}
               />
             </div>
             <div className="demo__form-group">
@@ -281,6 +302,19 @@ export function Demo() {
                 Enable link callback
               </label>
             </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-dark-theme-toggle
+                  checked={theme === 'dark'}
+                  onChange={(e) =>
+                    setTheme(e.target.checked ? 'dark' : 'light')
+                  }
+                />
+                Dark theme
+              </label>
+            </div>
             <div className="demo__data-display">
               <h3 className="demo__data-display-title">Last Link Result</h3>
               <div
@@ -313,6 +347,7 @@ export function Demo() {
                 className="card-canvas-demo-transform"
                 options={{ requireSelectionToMoveResize, selectOnMoveEnd }}
                 linkMode={linkMode}
+                theme={theme}
                 {...(linkCallbackEnabled
                   ? { onLinkClick: handleLinkClick }
                   : {})}
@@ -326,6 +361,20 @@ export function Demo() {
                   // 默认显示为 'arrange'（排列），与 getMindMapLayoutMode 保持一致
                   const currentLayoutMode: CardChildrenLayoutMode =
                     card.childrenLayoutMode ?? 'arrange';
+                  const isDark = theme === 'dark';
+                  const popoverBg = isDark ? '#1f2937' : '#ffffff';
+                  const popoverBorder = isDark
+                    ? '1px solid rgba(255,255,255,0.12)'
+                    : '1px solid rgba(0,0,0,0.12)';
+                  const popoverShadow = isDark
+                    ? '0 4px 6px -1px rgba(0,0,0,0.4)'
+                    : '0 4px 6px -1px rgba(0,0,0,0.1)';
+                  const labelColor = isDark ? '#9ca3af' : '#6b7280';
+                  const inputBorder = isDark
+                    ? '1px solid rgba(255,255,255,0.12)'
+                    : '1px solid #d1d5db';
+                  const inputBg = isDark ? '#374151' : '#ffffff';
+                  const inputColor = isDark ? '#e5e7eb' : '#0f0f0f';
                   return (
                     <div
                       className="card-canvas-demo-popover-content"
@@ -334,14 +383,14 @@ export function Demo() {
                         flexDirection: 'column',
                         gap: 8,
                         padding: 12,
-                        backgroundColor: '#ffffff',
-                        border: '1px solid rgba(0,0,0,0.12)',
+                        backgroundColor: popoverBg,
+                        border: popoverBorder,
                         borderRadius: 8,
-                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+                        boxShadow: popoverShadow,
                         minWidth: 160,
                       }}
                     >
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>
+                      <span style={{ fontSize: 12, color: labelColor }}>
                         标题
                       </span>
                       <input
@@ -349,11 +398,13 @@ export function Demo() {
                         onChange={(e) => set({ title: e.target.value })}
                         style={{
                           padding: '4px 8px',
-                          border: '1px solid #d1d5db',
+                          border: inputBorder,
                           borderRadius: 4,
+                          backgroundColor: inputBg,
+                          color: inputColor,
                         }}
                       />
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>
+                      <span style={{ fontSize: 12, color: labelColor }}>
                         内容
                       </span>
                       <input
@@ -361,11 +412,13 @@ export function Demo() {
                         onChange={(e) => set({ content: e.target.value })}
                         style={{
                           padding: '4px 8px',
-                          border: '1px solid #d1d5db',
+                          border: inputBorder,
                           borderRadius: 4,
+                          backgroundColor: inputBg,
+                          color: inputColor,
                         }}
                       />
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>
+                      <span style={{ fontSize: 12, color: labelColor }}>
                         子卡布局
                       </span>
                       <select
@@ -382,8 +435,10 @@ export function Demo() {
                         }}
                         style={{
                           padding: '4px 8px',
-                          border: '1px solid #d1d5db',
+                          border: inputBorder,
                           borderRadius: 4,
+                          backgroundColor: inputBg,
+                          color: inputColor,
                         }}
                       >
                         <option value="free">Free</option>

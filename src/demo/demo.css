@@ -18,10 +18,43 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/*
+ * Demo 主题变量：浅色（默认）
+ * 通过 <main data-theme="..."> 切换，所有颜色引用变量。
+ */
 .demo {
+  --demo-page-bg: #fafafa;
+  --demo-text-color: #0f0f0f;
+  --demo-muted-color: #525252;
+  --demo-surface-bg: #ffffff;
+  --demo-surface-border: rgba(0, 0, 0, 0.08);
+  --demo-surface-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --demo-input-border: rgba(0, 0, 0, 0.1);
+  --demo-input-focus-border: rgba(0, 0, 0, 0.3);
+  --demo-stage-bg: #f5f5f5;
+  --demo-code-bg: #f5f5f5;
+  --demo-divider-border: rgba(0, 0, 0, 0.08);
+
   min-height: 100dvh;
   width: 100%;
   padding: 2rem;
+  background-color: var(--demo-page-bg);
+  color: var(--demo-text-color);
+}
+
+/* 深色主题：反转页面背景/面板/文字/边框 */
+.demo[data-theme='dark'] {
+  --demo-page-bg: #111827;
+  --demo-text-color: #e5e7eb;
+  --demo-muted-color: #9ca3af;
+  --demo-surface-bg: #1f2937;
+  --demo-surface-border: rgba(255, 255, 255, 0.08);
+  --demo-surface-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --demo-input-border: rgba(255, 255, 255, 0.12);
+  --demo-input-focus-border: rgba(255, 255, 255, 0.4);
+  --demo-stage-bg: #111827;
+  --demo-code-bg: #111827;
+  --demo-divider-border: rgba(255, 255, 255, 0.08);
 }
 
 .demo__header {
@@ -32,13 +65,13 @@ body {
   display: inline-block;
   padding: 0.375rem 0.875rem;
   border-radius: 9999px;
-  background-color: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background-color: var(--demo-surface-bg);
+  border: 1px solid var(--demo-surface-border);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #525252;
+  color: var(--demo-muted-color);
 }
 
 .demo__title {
@@ -52,15 +85,15 @@ body {
 .demo__subtitle {
   margin: 0;
   font-size: 1.125rem;
-  color: #525252;
+  color: var(--demo-muted-color);
 }
 
 .demo__section {
   padding: 2rem;
-  background-color: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background-color: var(--demo-surface-bg);
+  border: 1px solid var(--demo-surface-border);
   border-radius: 1.5rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--demo-surface-shadow);
 }
 
 .demo__section-title {
@@ -85,20 +118,23 @@ body {
 .demo__form-group label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: #525252;
+  color: var(--demo-muted-color);
 }
 
 .demo__form-group input {
   padding: 0.5rem 0.75rem;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--demo-input-border);
   border-radius: 0.5rem;
   font-size: 0.875rem;
   outline: none;
   transition: border-color 0.2s;
+  /* 深色主题下输入框也需要深色背景 */
+  background-color: var(--demo-surface-bg);
+  color: var(--demo-text-color);
 }
 
 .demo__form-group input:focus {
-  border-color: rgba(0, 0, 0, 0.3);
+  border-color: var(--demo-input-focus-border);
 }
 
 .demo__form-group input[type='color'] {
@@ -135,7 +171,7 @@ body {
 .card-canvas-demo-settings {
   flex: 0 0 240px;
   padding-right: 1rem;
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  border-right: 1px solid var(--demo-divider-border);
 }
 
 .card-canvas-demo-stage {
@@ -144,9 +180,9 @@ body {
   min-height: 400px;
   position: relative;
   overflow: hidden;
-  background-color: #f5f5f5;
+  background-color: var(--demo-stage-bg);
   border-radius: 0.5rem;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--demo-surface-border);
 }
 
 .card-canvas-demo-stage-wrapper {
@@ -161,7 +197,7 @@ body {
 
 .demo__data-display {
   margin-top: 1.5rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--demo-divider-border);
   padding-top: 1rem;
 }
 
@@ -169,7 +205,7 @@ body {
   margin: 0 0 0.5rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #525252;
+  color: var(--demo-muted-color);
 }
 
 summary.demo__data-display-title {
@@ -180,9 +216,9 @@ summary.demo__data-display-title {
 .demo__data-display-content {
   margin: 0;
   padding: 1rem;
-  background-color: #f5f5f5;
+  background-color: var(--demo-code-bg);
   border-radius: 0.5rem;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--demo-surface-border);
   font-size: 0.8125rem;
   line-height: 1.5;
   overflow: auto;
@@ -190,4 +226,25 @@ summary.demo__data-display-title {
   font-family:
     'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono',
     'Source Code Pro', monospace;
+  color: var(--demo-text-color);
+}
+
+@media (max-width: 640px) {
+  .card-canvas-demo-layout {
+    flex-direction: column;
+  }
+
+  .card-canvas-demo-settings {
+    flex-basis: auto;
+    width: 100%;
+    padding-right: 0;
+    padding-bottom: 1rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--demo-divider-border);
+  }
+
+  .card-canvas-demo-stage {
+    width: 100%;
+    min-width: 0;
+  }
 }
