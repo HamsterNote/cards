@@ -1,6 +1,6 @@
 {
   "name": "@hamsternote/cards",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React 19 component library built with TypeScript 6 and Vite",
   "type": "module",
   "main": "./dist/index.es.js",
