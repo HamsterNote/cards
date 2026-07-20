@@ -37,6 +37,7 @@
   --cards-link-drag-circle-bg: #ffffff;
   --cards-link-drag-circle-color: #000000;
   --cards-card-header-bg: #f9fafb;
+  --cards-card-header-color: #0f0f0f;
   --cards-card-header-border: rgba(0, 0, 0, 0.08);
   --cards-card-content-color: #374151;
   --cards-resize-handle-border: rgba(0, 0, 0, 0.2);
@@ -83,6 +84,7 @@
   --cards-link-drag-circle-bg: #1f2937;
   --cards-link-drag-circle-color: #ffffff;
   --cards-card-header-bg: #374151;
+  --cards-card-header-color: #e5e7eb;
   --cards-card-header-border: rgba(255, 255, 255, 0.08);
   --cards-card-content-color: #e5e7eb;
   --cards-resize-handle-border: rgba(255, 255, 255, 0.25);
@@ -236,6 +238,7 @@
   font-weight: 500;
   font-size: 14px;
   background-color: var(--cards-card-header-bg);
+  color: var(--cards-card-header-color);
   cursor: default;
 }
 

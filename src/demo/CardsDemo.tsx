@@ -47,8 +47,12 @@ export function Demo() {
   const [selectEventCount, setSelectEventCount] = useState(0);
   const [newCardTitle, setNewCardTitle] = useState('');
   const [newCardContent, setNewCardContent] = useState('');
-  const [newCardTitleBg, setNewCardTitleBg] = useState('#f9fafb');
-  const [newCardContentBg, setNewCardContentBg] = useState('#ffffff');
+  const [newCardTitleBgOverride, setNewCardTitleBgOverride] = useState<
+    string | undefined
+  >();
+  const [newCardContentBgOverride, setNewCardContentBgOverride] = useState<
+    string | undefined
+  >();
   const [newCardParent, setNewCardParent] = useState('');
   const [requireSelectionToMoveResize, setRequireSelectionToMoveResize] =
     useState(false);
@@ -90,8 +94,12 @@ export function Demo() {
       width,
       height,
       zIndex: nextIndex,
-      titleStyle: { backgroundColor: newCardTitleBg },
-      contentStyle: { backgroundColor: newCardContentBg },
+      ...(newCardTitleBgOverride
+        ? { titleStyle: { backgroundColor: newCardTitleBgOverride } }
+        : {}),
+      ...(newCardContentBgOverride
+        ? { contentStyle: { backgroundColor: newCardContentBgOverride } }
+        : {}),
       ...(parentId ? { parent: parentId } : {}),
     };
 
@@ -207,8 +215,11 @@ export function Demo() {
                 id="card-title-bg"
                 data-card-title-bg-input
                 type="color"
-                value={newCardTitleBg}
-                onChange={(e) => setNewCardTitleBg(e.target.value)}
+                value={
+                  newCardTitleBgOverride ??
+                  (theme === 'dark' ? '#374151' : '#f9fafb')
+                }
+                onChange={(e) => setNewCardTitleBgOverride(e.target.value)}
               />
             </div>
             <div className="demo__form-group">
@@ -217,8 +228,11 @@ export function Demo() {
                 id="card-content-bg"
                 data-card-content-bg-input
                 type="color"
-                value={newCardContentBg}
-                onChange={(e) => setNewCardContentBg(e.target.value)}
+                value={
+                  newCardContentBgOverride ??
+                  (theme === 'dark' ? '#1f2937' : '#ffffff')
+                }
+                onChange={(e) => setNewCardContentBgOverride(e.target.value)}
               />
             </div>
             <div className="demo__form-group">
