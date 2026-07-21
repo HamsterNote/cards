@@ -26,6 +26,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "pack:check": "node scripts/check-pack.mjs",
     "test:e2e": "playwright test"
   },
   "peerDependencies": {
