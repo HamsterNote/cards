@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page, expect, test } from '@playwright/test';
 import {
   addCard,
   cardLocatorSelector,
@@ -7,8 +7,8 @@ import {
   dragHandleToPoint,
   dragLocatorBy,
   enableOption,
-  expectConnectorMatchesCardCenters,
   expectCardPositionUnchanged,
+  expectConnectorMatchesCardCenters,
   expectNoParent,
   getCardData,
   getCardDataById,
@@ -214,25 +214,39 @@ test.describe('CardCanvas link mode', () => {
     ).toContainText('Target: Alpha');
 
     // And: the link target card becomes selected.
-    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
     await expect(page.locator('[data-card-id="card-1"]')).toHaveClass(
       /cards-card-canvas__card--selected/
     );
   });
 
-  test('selects the link target card when its footer link is clicked', async ({ page }) => {
+  test('selects the link target card when its footer link is clicked', async ({
+    page,
+  }) => {
     // Given: two linked cards and card-1 is initially selected.
     await createLinkedPair(page);
-    await page.locator(`${cardLocatorSelector('card-1')} .cards-card-canvas__card-content`).click();
-    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-1');
+    await page
+      .locator(
+        `${cardLocatorSelector('card-1')} .cards-card-canvas__card-content`
+      )
+      .click();
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
 
     // When: clicking the source card's footer link that points to card-2.
     await page
-      .locator('[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]')
+      .locator(
+        '[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]'
+      )
       .click();
 
     // Then: card-2 becomes the selected card.
-    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-2');
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-2'
+    );
     await expect(page.locator('[data-card-id="card-2"]')).toHaveClass(
       /cards-card-canvas__card--selected/
     );
@@ -387,6 +401,9 @@ test.describe('CardCanvas link mode', () => {
       )
       .click();
     await page.getByTestId('delete-selected-card').click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
 
     // Then: the source footer re-resolves linked targets and drops the stale button.
     await expect(page.locator(cardLocatorSelector('card-2'))).toHaveCount(0);
@@ -407,9 +424,7 @@ test.describe('CardCanvas link mode', () => {
     // Given: the demo mounts CardCanvas without the optional onLinkClick prop.
     await createLinkedPair(page);
     await disableOption(page, '[data-card-link-callback-enabled-toggle]');
-    const beforeBox = await getRequiredBox(
-      page.locator(cardLocatorSelector('card-1'))
-    );
+    const beforeSource = getCardDataById(await getCardData(page), 'card-1');
     const callbackResultBefore = await page
       .locator('[data-card-link-callback-result]')
       .innerText();
@@ -422,17 +437,18 @@ test.describe('CardCanvas link mode', () => {
       .click();
 
     // Then: the link target card becomes selected, callback and geometry stay unchanged.
-    const afterBox = await getRequiredBox(
-      page.locator(cardLocatorSelector('card-1'))
-    );
+    const afterSource = getCardDataById(await getCardData(page), 'card-1');
     await expect(page.locator('[data-card-link-callback-result]')).toHaveText(
       callbackResultBefore
     );
-    await expect(page.locator('[data-card-selected-display]')).toHaveText('card-2');
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-2'
+    );
     await expect(page.locator('[data-card-id="card-2"]')).toHaveClass(
       /cards-card-canvas__card--selected/
     );
-    expect(afterBox.x).toBeCloseTo(beforeBox.x, 5);
-    expect(afterBox.y).toBeCloseTo(beforeBox.y, 5);
+    // Playwright may scroll the page to bring the footer button into view;
+    // card-model coordinates are the stable geometry contract under test.
+    expectCardPositionUnchanged(beforeSource, afterSource);
   });
 });

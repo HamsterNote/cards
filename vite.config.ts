@@ -23,7 +23,14 @@ export default defineConfig({
       fileName: () => 'index.es.js',
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      external: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        '@hamster-note/components',
+        '@hamster-note/notes',
+        '@hamster-note/virtual-paper',
+      ],
       output: {
         globals: {
           react: 'React',

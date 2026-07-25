@@ -18,11 +18,20 @@ type CardDragLocators = {
 
 type CardDataSnapshot = {
   readonly id: string;
+  readonly title: string;
+  readonly content: string;
+  readonly contentBlocks?: readonly ContentBlockSnapshot[];
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
   readonly parent?: string;
+};
+
+type ContentBlockSnapshot = {
+  readonly id: string;
+  readonly kind: string;
+  readonly text?: string;
 };
 
 type HierarchyCardIds = {
@@ -128,13 +137,28 @@ function isCardDataSnapshot(value: unknown): value is CardDataSnapshot {
   if (!isRecord(value)) return false;
 
   const parent = value.parent;
+  const contentBlocks = value.contentBlocks;
   return (
     typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.content === 'string' &&
     typeof value.x === 'number' &&
     typeof value.y === 'number' &&
     typeof value.width === 'number' &&
     typeof value.height === 'number' &&
-    (parent === undefined || typeof parent === 'string')
+    (parent === undefined || typeof parent === 'string') &&
+    (contentBlocks === undefined ||
+      (Array.isArray(contentBlocks) &&
+        contentBlocks.every(isContentBlockSnapshot)))
+  );
+}
+
+function isContentBlockSnapshot(value: unknown): value is ContentBlockSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.kind === 'string' &&
+    (value.text === undefined || typeof value.text === 'string')
   );
 }
 
@@ -1693,6 +1717,9 @@ test.describe('CardCanvas Delete Selected', () => {
     await expect(firstCard).toHaveClass(/cards-card-canvas__card--selected/);
 
     await page.getByTestId('delete-selected-card').click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
     await expect(firstCard).toHaveCount(0);
     await expect(secondCard).toBeVisible();
 
@@ -1720,11 +1747,10 @@ test.describe('CardCanvas Delete Selected', () => {
       'card-1'
     );
 
-    page.once('dialog', async (dialog) => {
-      expect(dialog.message()).toBe('Delete this card and its child cards?');
-      await dialog.accept();
-    });
     await page.getByTestId('delete-selected-card').click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
 
     await expect(cardA).toHaveCount(0);
     await expect(cardB).toHaveCount(0);
@@ -1747,11 +1773,10 @@ test.describe('CardCanvas Delete Selected', () => {
       .dispatchEvent('click');
     await expect(cardA).toHaveClass(/cards-card-canvas__card--selected/);
 
-    page.once('dialog', async (dialog) => {
-      expect(dialog.message()).toBe('Delete this card and its child cards?');
-      await dialog.dismiss();
-    });
     await page.getByTestId('delete-selected-card').click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
 
     await expect(cardA).toBeVisible();
     await expect(cardB).toBeVisible();
@@ -1773,8 +1798,136 @@ test.describe('CardCanvas Delete Selected', () => {
     );
 
     await page.getByTestId('delete-selected-card').click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
 
     await expect(firstCard).toHaveCount(0);
     await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+  });
+});
+
+test.describe('CardCanvas direct editing', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await addCard(page, 'Original title', 'Original content');
+    await page.locator('[data-card-editable-toggle]').check();
+  });
+
+  test('writes a plain-text title back to controlled card data', async ({
+    page,
+  }) => {
+    // Given: the first card title is directly editable.
+    const title = page.locator(
+      '[data-card-id="card-1"] [data-card-title-edit]'
+    );
+    await expect(title).toHaveText('Original title');
+
+    // When: the user replaces the title and commits with Enter.
+    await title.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Edited title');
+    await page.keyboard.press('Enter');
+
+    // Then: the visible title and controlled data contain plain text only.
+    await expect(title).toHaveText('Edited title');
+    expect(getCardDataById(await getCardData(page), 'card-1').title).toBe(
+      'Edited title'
+    );
+  });
+
+  test('does not move a card while dragging across its editable title', async ({
+    page,
+  }) => {
+    // Given: the editable title has suspended card dragging.
+    const title = page.locator(
+      '[data-card-id="card-1"] [data-card-title-edit]'
+    );
+    const before = getCardDataById(await getCardData(page), 'card-1');
+
+    // When: the pointer drags across the title as if selecting text.
+    await dragLocatorBy(page, title, { x: 60, y: 20 });
+
+    // Then: the card coordinates remain unchanged.
+    const after = getCardDataById(await getCardData(page), 'card-1');
+    expectCardPositionUnchanged(before, after);
+  });
+
+  test('writes NoteContent paragraph edits to blocks and plain-text content', async ({
+    page,
+  }) => {
+    // Given: the card body is rendered by editable NoteContent.
+    const paragraph = page
+      .locator(
+        '[data-card-id="card-1"] [data-card-note-content] [contenteditable="true"]:visible'
+      )
+      .first();
+    await expect(paragraph).toBeVisible();
+
+    // When: the user replaces the paragraph text and leaves the editor.
+    await paragraph.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Edited note body');
+    await page.keyboard.press('Tab');
+
+    // Then: rich blocks are the truth source and content mirrors their plain text.
+    await expect
+      .poll(
+        async () => getCardDataById(await getCardData(page), 'card-1').content
+      )
+      .toBe('Edited note body');
+    const card = getCardDataById(await getCardData(page), 'card-1');
+    expect(card.contentBlocks?.[0]?.text).toBe('Edited note body');
+  });
+});
+
+test.describe('CardCanvas virtual paper', () => {
+  test('toggles virtual paper without changing the default canvas surface', async ({
+    page,
+  }) => {
+    // Given: a regular card canvas with virtual paper disabled by default.
+    await page.goto('/');
+    await addCard(page, 'Virtual paper card', 'Zoomable content');
+    await expect(page.locator('[data-card-virtual-paper]')).toHaveCount(0);
+
+    // When: the user enables virtual paper from the demo control.
+    await page.locator('[data-card-virtual-paper-toggle]').check();
+
+    // Then: the canvas is hosted by VirtualPaper while its card remains usable.
+    await expect(page.locator('[data-card-virtual-paper]')).toHaveCount(1);
+    await expect(page.locator('[data-card-id="card-1"]')).toBeVisible();
+  });
+
+  test('converts a scaled pointer drag back to card coordinates', async ({
+    page,
+  }) => {
+    // Given: virtual paper is enabled and its zoom gesture has enlarged the card.
+    await page.goto('/');
+    await addCard(page, 'Scaled card', 'Coordinate conversion');
+    await page.locator('[data-card-virtual-paper-toggle]').check();
+    const card = page.locator('[data-card-id="card-1"]');
+    const initialBox = await getRequiredBox(card);
+    await page.mouse.move(
+      initialBox.x + initialBox.width / 2,
+      initialBox.y + initialBox.height / 2
+    );
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -600);
+    await page.keyboard.up('Control');
+    await expect
+      .poll(async () => (await getRequiredBox(card)).width)
+      .toBeGreaterThan(initialBox.width);
+    const before = getCardDataById(await getCardData(page), 'card-1');
+
+    // When: the card moves by a fixed screen distance while the viewport is scaled.
+    await dragLocatorBy(page, card.locator('.cards-card-canvas__card-header'), {
+      x: 60,
+      y: 0,
+    });
+
+    // Then: persisted canvas coordinates move by less than the screen distance.
+    const after = getCardDataById(await getCardData(page), 'card-1');
+    expect(after.x - before.x).toBeGreaterThan(0);
+    expect(after.x - before.x).toBeLessThan(60);
   });
 });

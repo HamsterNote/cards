@@ -1,9 +1,16 @@
+import {
+  Button as ComponentsButton,
+  Dialog,
+  confirm,
+} from '@hamster-note/components';
 import { useEffect, useState } from 'react';
-import { Button, CardCanvas, deleteCards } from '../index';
-import type {
-  CardCanvasCard,
-  CardChildrenLayoutMode,
-  CardsTheme,
+import {
+  Button,
+  CardCanvas,
+  CardComments,
+  type CardCanvasCard,
+  type CardsTheme,
+  deleteCards,
 } from '../index';
 import { normalizeMindMapLayout } from '../utils/card-layout';
 
@@ -59,6 +66,9 @@ export function Demo() {
   const [selectOnMoveEnd, setSelectOnMoveEnd] = useState(false);
   const [selectNewCardOnAdd, setSelectNewCardOnAdd] = useState(true);
   const [linkMode, setLinkMode] = useState(false);
+  const [commentingCardId, setCommentingCardId] = useState<string>();
+  const [editable, setEditable] = useState(false);
+  const [virtualPaper, setVirtualPaper] = useState(false);
   const [theme, setTheme] = useState<CardsTheme>('light');
   const [linkCallbackEnabled, setLinkCallbackEnabled] = useState(true);
   const [lastLinkResult, setLastLinkResult] = useState<LastLinkResult | null>(
@@ -114,11 +124,13 @@ export function Demo() {
 
   const handleSelect = (id: string) => {
     setSelected([id]);
+    setCommentingCardId(undefined);
     setSelectEventCount((count) => count + 1);
   };
 
   const handleClearSelection = () => {
     setSelected([]);
+    setCommentingCardId(undefined);
   };
 
   const handleLinkClick = (
@@ -133,25 +145,39 @@ export function Demo() {
     });
   };
 
-  const handleDeleteSelected = async () => {
-    if (selected.length === 0) return;
-
+  const handleDeleteCards = async (deleteIds: readonly string[]) => {
     const newCards = await deleteCards(
       cards,
-      selected,
-      async (_cards, _deleteIds, meta) => {
-        if (meta.hasChildren) {
-          return window.confirm('Delete this card and its child cards?');
-        }
-        return true;
-      }
+      deleteIds,
+      async (_cards, _deleteIds, meta) =>
+        confirm({
+          title: 'Delete card?',
+          description: meta.hasChildren
+            ? 'Delete this card and its child cards? This action cannot be undone.'
+            : 'This action cannot be undone.',
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+          tone: 'danger',
+        })
     );
+
+    if (newCards === cards) return;
 
     setCards(normalizeMindMapLayout(newCards));
     setSelected((prev) =>
       prev.filter((id) => newCards.some((card) => card.id === id))
     );
+    setCommentingCardId((cardId) =>
+      cardId !== undefined && newCards.some((card) => card.id === cardId)
+        ? cardId
+        : undefined
+    );
   };
+
+  const commentingCard =
+    commentingCardId === undefined
+      ? undefined
+      : cards.find((card) => card.id === commentingCardId);
 
   return (
     <main className="demo" data-theme={theme}>
@@ -205,7 +231,7 @@ export function Demo() {
               size="md"
               theme={theme}
               disabled={selected.length === 0}
-              onClick={handleDeleteSelected}
+              onClick={() => handleDeleteCards(selected)}
             >
               Delete Selected
             </Button>
@@ -244,6 +270,28 @@ export function Demo() {
                 onChange={(e) => setNewCardParent(e.target.value)}
                 placeholder="Parent ID"
               />
+            </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-editable-toggle
+                  checked={editable}
+                  onChange={(event) => setEditable(event.target.checked)}
+                />
+                Edit cards directly
+              </label>
+            </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-virtual-paper-toggle
+                  checked={virtualPaper}
+                  onChange={(event) => setVirtualPaper(event.target.checked)}
+                />
+                Enable virtual paper
+              </label>
             </div>
             <div className="demo__form-group demo__form-group--checkbox">
               <label>
@@ -347,110 +395,56 @@ export function Demo() {
                 className="card-canvas-demo-transform"
                 options={{ requireSelectionToMoveResize, selectOnMoveEnd }}
                 linkMode={linkMode}
+                editable={editable}
+                virtualPaper={virtualPaper}
                 theme={theme}
                 {...(linkCallbackEnabled
                   ? { onLinkClick: handleLinkClick }
                   : {})}
-                renderCardTitle={(title: string) => (
-                  <span data-card-rendered-title>{title}</span>
-                )}
-                renderCardContent={(content: string) => (
-                  <span data-card-rendered-content>{content}</span>
-                )}
-                renderPopover={(card, set) => {
-                  // 默认显示为 'arrange'（排列），与 getMindMapLayoutMode 保持一致
-                  const currentLayoutMode: CardChildrenLayoutMode =
-                    card.childrenLayoutMode ?? 'arrange';
-                  const isDark = theme === 'dark';
-                  const popoverBg = isDark ? '#1f2937' : '#ffffff';
-                  const popoverBorder = isDark
-                    ? '1px solid rgba(255,255,255,0.12)'
-                    : '1px solid rgba(0,0,0,0.12)';
-                  const popoverShadow = isDark
-                    ? '0 4px 6px -1px rgba(0,0,0,0.4)'
-                    : '0 4px 6px -1px rgba(0,0,0,0.1)';
-                  const labelColor = isDark ? '#9ca3af' : '#6b7280';
-                  const inputBorder = isDark
-                    ? '1px solid rgba(255,255,255,0.12)'
-                    : '1px solid #d1d5db';
-                  const inputBg = isDark ? '#374151' : '#ffffff';
-                  const inputColor = isDark ? '#e5e7eb' : '#0f0f0f';
-                  return (
-                    <div
-                      className="card-canvas-demo-popover-content"
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 8,
-                        padding: 12,
-                        backgroundColor: popoverBg,
-                        border: popoverBorder,
-                        borderRadius: 8,
-                        boxShadow: popoverShadow,
-                        minWidth: 160,
-                      }}
+                {...(!editable
+                  ? {
+                      renderCardTitle: (title: string) => (
+                        <span data-card-rendered-title>{title}</span>
+                      ),
+                      renderCardContent: (content: string) => (
+                        <span data-card-rendered-content>{content}</span>
+                      ),
+                    }
+                  : {})}
+                onCommentCard={(card) => setCommentingCardId(card.id)}
+                renderPopover={(card) => (
+                  <>
+                    <ComponentsButton
+                      data-card-popover-delete-button
+                      size="small"
+                      variant="ghost"
+                      onClick={() => handleDeleteCards([card.id])}
                     >
-                      <span style={{ fontSize: 12, color: labelColor }}>
-                        标题
-                      </span>
-                      <input
-                        value={card.title}
-                        onChange={(e) => set({ title: e.target.value })}
-                        style={{
-                          padding: '4px 8px',
-                          border: inputBorder,
-                          borderRadius: 4,
-                          backgroundColor: inputBg,
-                          color: inputColor,
-                        }}
-                      />
-                      <span style={{ fontSize: 12, color: labelColor }}>
-                        内容
-                      </span>
-                      <input
-                        value={card.content}
-                        onChange={(e) => set({ content: e.target.value })}
-                        style={{
-                          padding: '4px 8px',
-                          border: inputBorder,
-                          borderRadius: 4,
-                          backgroundColor: inputBg,
-                          color: inputColor,
-                        }}
-                      />
-                      <span style={{ fontSize: 12, color: labelColor }}>
-                        子卡布局
-                      </span>
-                      <select
-                        data-card-children-layout-mode-select
-                        value={currentLayoutMode}
-                        onChange={(event) => {
-                          const nextMode: CardChildrenLayoutMode =
-                            event.target.value === 'mind-map-horizontal'
-                              ? 'mind-map-horizontal'
-                              : event.target.value === 'arrange'
-                                ? 'arrange'
-                                : 'free';
-                          set({ childrenLayoutMode: nextMode });
-                        }}
-                        style={{
-                          padding: '4px 8px',
-                          border: inputBorder,
-                          borderRadius: 4,
-                          backgroundColor: inputBg,
-                          color: inputColor,
-                        }}
-                      >
-                        <option value="free">Free</option>
-                        <option value="mind-map-horizontal">
-                          Mind-map horizontal
-                        </option>
-                        <option value="arrange">Arrange</option>
-                      </select>
-                    </div>
-                  );
-                }}
+                      Delete
+                    </ComponentsButton>
+                  </>
+                )}
               />
+              <Dialog
+                onClose={() => setCommentingCardId(undefined)}
+                open={commentingCard !== undefined}
+                title="评论详情"
+              >
+                {commentingCard === undefined ? null : (
+                  <CardComments
+                    comments={commentingCard.comments ?? []}
+                    onCommentsChange={(comments) =>
+                      setCards((currentCards) =>
+                        currentCards.map((card) =>
+                          card.id === commentingCard.id
+                            ? { ...card, comments }
+                            : card
+                        )
+                      )
+                    }
+                  />
+                )}
+              </Dialog>
             </div>
           </div>
         </div>

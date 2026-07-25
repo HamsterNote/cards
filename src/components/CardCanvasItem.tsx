@@ -1,3 +1,7 @@
+import { Icon } from '@hamster-note/components';
+import { type NoteBlock, NoteContent } from '@hamster-note/notes';
+// notes 富文本编辑器样式：打进本库 dist/cards.css，使用方无需单独引入
+import '@hamster-note/notes/styles.css';
 import {
   Drag,
   DragOperationType,
@@ -5,29 +9,44 @@ import {
   FingerOperationType,
   type Pose,
 } from '@system-ui-js/multi-drag';
-import type { MutableRefObject, ReactNode } from 'react';
-import { useEffect, useRef } from 'react';
-import type { CardCanvasCard, CardCanvasOptions } from './CardCanvas';
+import {
+  type MutableRefObject,
+  type ClipboardEvent as ReactClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
+import type { CardsTheme } from '../theme';
+import {
+  createParagraphBlocksFromText,
+  extractPlainTextFromBlocks,
+} from '../utils/card-content-blocks';
+import {
+  getMindMapLayoutMode,
+  MIND_MAP_DETACH_THRESHOLD,
+  normalizeMindMapLayout,
+} from '../utils/card-layout';
+import {
+  finalizeCardDragLayout,
+  resizeCardWithMindMapNormalization,
+} from '../utils/card-layout-interactions';
+import {
+  addSymmetricCardLink,
+  findTopmostLinkTargetId,
+  resolveLinkedCards,
+} from '../utils/card-links';
 import type { CardDragPositionSnapshot, ContentInset } from '../utils/cards';
 import {
   createDragPositionSnapshot,
   findParentCandidateId,
   moveCardsFromSnapshot,
 } from '../utils/cards';
-import {
-  addSymmetricCardLink,
-  findTopmostLinkTargetId,
-  resolveLinkedCards,
-} from '../utils/card-links';
-import {
-  finalizeCardDragLayout,
-  resizeCardWithMindMapNormalization,
-} from '../utils/card-layout-interactions';
-import {
-  MIND_MAP_DETACH_THRESHOLD,
-  getMindMapLayoutMode,
-  normalizeMindMapLayout,
-} from '../utils/card-layout';
+import type { CardCanvasCard, CardCanvasOptions } from './CardCanvas';
+
+const CARD_MENU_POPOVER_ID = 'cards-card-canvas-children-layout-menu';
 
 export interface CardCanvasItemProps {
   readonly card: CardCanvasCard;
@@ -36,11 +55,32 @@ export interface CardCanvasItemProps {
   readonly onCardsChangeRef: MutableRefObject<
     ((nextCards: CardCanvasCard[]) => void) | undefined
   >;
+  readonly viewportScale: number;
   readonly isSelected: boolean;
   readonly onSelect?: ((id: string) => void) | undefined;
   readonly options: Required<CardCanvasOptions>;
   readonly renderCardTitle?: ((title: string) => ReactNode) | undefined;
   readonly renderCardContent?: ((content: string) => ReactNode) | undefined;
+  /** 是否启用卡片直接编辑（标题纯文本内联编辑 + 内容 NoteContent 编辑 + 更多菜单） */
+  readonly editable: boolean;
+  /** 画布主题，透传给 NoteContent */
+  readonly theme: CardsTheme;
+  /** 将部分数据合并到当前卡片（与画布 Popover 的 set 同一路径，含导图布局归一化） */
+  readonly onPatchCard: (data: Partial<Omit<CardCanvasCard, 'id'>>) => void;
+  /** 当前卡片的"更多"菜单是否打开 */
+  readonly isMenuOpen: boolean;
+  /** 切换"更多"菜单开关状态 */
+  readonly onToggleMenu: (open: boolean) => void;
+  /** 将"更多"菜单触发按钮回传给画布，用作 body Portal 的定位锚点 */
+  readonly onMenuAnchorChange: (
+    cardId: string,
+    anchor: HTMLButtonElement | null
+  ) => void;
+  /** 将卡片容器回传给画布，用作选中 Popover 的定位锚点 */
+  readonly onPopoverAnchorChange: (
+    cardId: string,
+    anchor: HTMLDivElement | null
+  ) => void;
   readonly isParentCandidate: boolean;
   readonly setParentCandidateId: (id: string | undefined) => void;
   readonly linkMode: boolean;
@@ -72,11 +112,19 @@ export function CardCanvasItem({
   cards,
   cardsRef,
   onCardsChangeRef,
+  viewportScale,
   isSelected,
   onSelect,
   options,
   renderCardTitle,
   renderCardContent,
+  editable,
+  theme,
+  onPatchCard,
+  isMenuOpen,
+  onToggleMenu,
+  onMenuAnchorChange,
+  onPopoverAnchorChange,
   isParentCandidate,
   setParentCandidateId,
   linkMode,
@@ -96,6 +144,7 @@ export function CardCanvasItem({
   const didMoveRef = useRef(false);
   const cardPropRef = useRef(card);
   const optionsRef = useRef(options);
+  const viewportScaleRef = useRef(viewportScale);
   const linkModeRef = useRef(linkMode);
   const onSelectRef = useRef(onSelect);
   const onLinkClickRef = useRef(onLinkClick);
@@ -117,14 +166,29 @@ export function CardCanvasItem({
   const canMoveOrResizeRef = useRef(canMoveOrResize);
   const isManagedChildDragRef = useRef(false);
   const hasDetachedRef = useRef(false);
+  const setMenuButtonRef = useCallback(
+    (anchor: HTMLButtonElement | null) => {
+      onMenuAnchorChange(card.id, anchor);
+    },
+    [card.id, onMenuAnchorChange]
+  );
 
   useEffect(() => {
     cardPropRef.current = card;
   }, [card]);
 
   useEffect(() => {
+    onPopoverAnchorChange(card.id, cardRef.current);
+    return () => onPopoverAnchorChange(card.id, null);
+  }, [card.id, onPopoverAnchorChange]);
+
+  useEffect(() => {
     optionsRef.current = options;
   }, [options]);
+
+  useEffect(() => {
+    viewportScaleRef.current = viewportScale;
+  }, [viewportScale]);
 
   useEffect(() => {
     linkModeRef.current = linkMode;
@@ -212,10 +276,14 @@ export function CardCanvasItem({
       readonly y: number;
     }) => {
       const offset = viewportOffsetRef.current;
+      const scale = viewportScaleRef.current;
       const localPointerPoint =
         offset === undefined
           ? clientPoint
-          : { x: clientPoint.x - offset.x, y: clientPoint.y - offset.y };
+          : {
+              x: (clientPoint.x - offset.x) / scale,
+              y: (clientPoint.y - offset.y) / scale,
+            };
       const cardId = cardPropRef.current.id;
       pointerPointRef.current = localPointerPoint;
       linkTargetIdRef.current = findTopmostLinkTargetId({
@@ -254,8 +322,8 @@ export function CardCanvasItem({
       const currentCard = cardPropRef.current;
       const cardElRect = cardEl.getBoundingClientRect();
       viewportOffsetRef.current = {
-        x: cardElRect.left - currentCard.x,
-        y: cardElRect.top - currentCard.y,
+        x: cardElRect.left - currentCard.x * viewportScaleRef.current,
+        y: cardElRect.top - currentCard.y * viewportScaleRef.current,
       };
 
       if (linkModeRef.current) {
@@ -306,10 +374,14 @@ export function CardCanvasItem({
 
       const cardId = cardPropRef.current.id;
       const offset = viewportOffsetRef.current;
+      const scale = viewportScaleRef.current;
       const localPointerPoint =
         offset === undefined
           ? moveOp.point
-          : { x: moveOp.point.x - offset.x, y: moveOp.point.y - offset.y };
+          : {
+              x: (moveOp.point.x - offset.x) / scale,
+              y: (moveOp.point.y - offset.y) / scale,
+            };
       pointerPointRef.current = localPointerPoint;
 
       if (isLinkDragRef.current) {
@@ -332,8 +404,10 @@ export function CardCanvasItem({
       )
         return;
 
-      const deltaX = moveOp.point.x - startOp.point.x;
-      const deltaY = moveOp.point.y - startOp.point.y;
+      const deltaX =
+        (moveOp.point.x - startOp.point.x) / viewportScaleRef.current;
+      const deltaY =
+        (moveOp.point.y - startOp.point.y) / viewportScaleRef.current;
 
       if (isManagedChildDragRef.current && !hasDetachedRef.current) {
         const dragDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
@@ -553,8 +627,10 @@ export function CardCanvasItem({
       const moveOp = finger.getLastOperation(FingerOperationType.Move);
       if (!startOp || !moveOp) return;
 
-      const deltaX = moveOp.point.x - startOp.point.x;
-      const deltaY = moveOp.point.y - startOp.point.y;
+      const deltaX =
+        (moveOp.point.x - startOp.point.x) / viewportScaleRef.current;
+      const deltaY =
+        (moveOp.point.y - startOp.point.y) / viewportScaleRef.current;
       const nextWidth = Math.max(80, initialWidth + deltaX);
       // 管控子卡片因垂直居中布局，高度变化会导致上下边界同时移动（各 delta/2），
       // 底边实际只走了 deltaY 的一半。将高度 delta x2 使底边跟手。
@@ -729,6 +805,99 @@ export function CardCanvasItem({
     }
   };
 
+  // multi-drag 不识别 contentEditable/按钮等交互元素，指针进入编辑/菜单区域时
+  // 禁用卡片拖拽，避免文本选择或按钮点击触发卡片移动；离开后按当前权限恢复。
+  const suspendCardDrag = () => {
+    dragRef.current?.setDisabled();
+  };
+  const resumeCardDrag = () => {
+    if (canMoveOrResizeRef.current) {
+      dragRef.current?.setEnabled();
+    }
+  };
+
+  const titleEditRef = useRef<HTMLSpanElement>(null);
+
+  const commitTitleEdit = () => {
+    const el = titleEditRef.current;
+    if (!el) return;
+    const nextTitle = el.textContent ?? '';
+    if (nextTitle !== card.title) {
+      onPatchCard({ title: nextTitle });
+    }
+  };
+
+  const handleTitleEditKeyDown = (
+    event: ReactKeyboardEvent<HTMLSpanElement>
+  ) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.currentTarget.blur();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.currentTarget.textContent = card.title;
+      event.currentTarget.blur();
+    }
+  };
+
+  // 标题为纯文本编辑：粘贴时剥掉富文本格式，只插入 text/plain
+  const handleTitleEditPaste = (
+    event: ReactClipboardEvent<HTMLSpanElement>
+  ) => {
+    event.preventDefault();
+    document.execCommand(
+      'insertText',
+      false,
+      event.clipboardData.getData('text/plain')
+    );
+  };
+
+  // 外部 title 变更（程序化更新/父级重算）在非聚焦时同步进 contentEditable
+  useEffect(() => {
+    const el = titleEditRef.current;
+    if (el && document.activeElement !== el && el.textContent !== card.title) {
+      el.textContent = card.title;
+    }
+  }, [card.title]);
+
+  const showNoteContent = editable || (card.contentBlocks?.length ?? 0) > 0;
+
+  const noteBlocks = useMemo<readonly NoteBlock[]>(
+    () =>
+      card.contentBlocks ??
+      createParagraphBlocksFromText(card.id, card.content),
+    [card.contentBlocks, card.id, card.content]
+  );
+
+  const handleBlocksChange = (blocks: NoteBlock[]) => {
+    // contentBlocks 为真相源；content 同步纯文本镜像
+    onPatchCard({
+      contentBlocks: blocks,
+      content: extractPlainTextFromBlocks(blocks),
+    });
+  };
+
+  // NoteContent 包裹层的 pointerenter/leave 用原生绑定，避免静态 a11y lint
+  // 把该 div 误判为交互元素（与上方 bindClickSelect 同一规避手法）。
+  const noteWrapperRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = noteWrapperRef.current;
+    if (!el || !showNoteContent) return;
+    const suspend = () => dragRef.current?.setDisabled();
+    const resume = () => {
+      if (canMoveOrResizeRef.current) {
+        dragRef.current?.setEnabled();
+      }
+    };
+    el.addEventListener('pointerenter', suspend);
+    el.addEventListener('pointerleave', resume);
+    return () => {
+      el.removeEventListener('pointerenter', suspend);
+      el.removeEventListener('pointerleave', resume);
+    };
+  }, [showNoteContent]);
+
   return (
     <div
       ref={cardRef}
@@ -752,14 +921,77 @@ export function CardCanvasItem({
         className="cards-card-canvas__card-header"
         style={card.titleStyle}
       >
-        {renderCardTitle ? renderCardTitle(card.title) : card.title}
+        {renderCardTitle ? (
+          renderCardTitle(card.title)
+        ) : editable ? (
+          // biome-ignore lint/a11y/useSemanticElements: 标题需保持行内纯文本样式与自适应宽度，input/textarea 无法等同呈现
+          <span
+            ref={titleEditRef}
+            className="cards-card-canvas__card-title-edit"
+            data-card-title-edit
+            contentEditable
+            role="textbox"
+            aria-multiline={false}
+            tabIndex={0}
+            suppressContentEditableWarning
+            spellCheck={false}
+            onBlur={commitTitleEdit}
+            onKeyDown={handleTitleEditKeyDown}
+            onPaste={handleTitleEditPaste}
+            onPointerEnter={suspendCardDrag}
+            onPointerLeave={resumeCardDrag}
+          >
+            {card.title}
+          </span>
+        ) : (
+          card.title
+        )}
       </div>
+      {editable && (
+        <button
+          type="button"
+          className="cards-card-canvas__card-menu-button"
+          data-card-menu-button
+          aria-label="卡片更多选项"
+          aria-controls={CARD_MENU_POPOVER_ID}
+          aria-expanded={isMenuOpen}
+          ref={setMenuButtonRef}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleMenu(!isMenuOpen);
+          }}
+          onPointerEnter={suspendCardDrag}
+          onPointerLeave={resumeCardDrag}
+        >
+          <Icon name="more" />
+        </button>
+      )}
       <div
         ref={contentRef}
         className="cards-card-canvas__card-content"
         style={card.contentStyle}
       >
-        {renderCardContent ? renderCardContent(card.content) : card.content}
+        {renderCardContent ? (
+          renderCardContent(card.content)
+        ) : showNoteContent ? (
+          <div
+            ref={noteWrapperRef}
+            className="cards-card-canvas__card-note"
+            data-card-note-content
+          >
+            <NoteContent
+              blocks={noteBlocks}
+              title=""
+              theme={theme}
+              editable={editable}
+              onBlocksChange={handleBlocksChange}
+              topPadding={0}
+              bottomPadding={0}
+            />
+          </div>
+        ) : (
+          card.content
+        )}
       </div>
       {/* Links footer:作为卡片的独立 flex 子元素，不参与 content 的滚动。
           flex-shrink:0 保证 Links 始终完整展示，空间不足时由 content 区域滚动。 */}

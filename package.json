@@ -58,6 +58,9 @@
   },
   "packageManager": "yarn@1.22.22",
   "dependencies": {
+    "@hamster-note/components": "^0.2.1-beta.2",
+    "@hamster-note/notes": "file:../notes/hamster-note-notes-1.2.0-beta.tgz",
+    "@hamster-note/virtual-paper": "0.1.0-beta.2",
     "@system-ui-js/multi-drag": "^0.4.0"
   }
 }

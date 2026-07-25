@@ -11,23 +11,18 @@
   --cards-card-bg: #ffffff;
   --cards-card-border: rgba(0, 0, 0, 0.12);
   --cards-card-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --cards-card-selected-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1),
     0 0 0 4px rgba(59, 130, 246, 0.15);
   --cards-card-parent-candidate-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1),
     0 0 0 4px rgba(16, 185, 129, 0.15);
   --cards-card-link-source-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1),
     0 0 0 4px rgba(99, 102, 241, 0.15);
   --cards-card-link-target-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1),
     0 0 0 4px rgba(37, 99, 235, 0.2);
   --cards-connector-stroke: #d1d5db;
   --cards-parent-connector-stroke: #9ca3af;
@@ -58,23 +53,18 @@
   --cards-card-bg: #1f2937;
   --cards-card-border: rgba(255, 255, 255, 0.12);
   --cards-card-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.4),
-    0 2px 4px -1px rgba(0, 0, 0, 0.3);
+    0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
   --cards-card-selected-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.4),
-    0 4px 6px -4px rgba(0, 0, 0, 0.3),
+    0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3),
     0 0 0 4px rgba(59, 130, 246, 0.25);
   --cards-card-parent-candidate-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.4),
-    0 4px 6px -4px rgba(0, 0, 0, 0.3),
+    0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3),
     0 0 0 4px rgba(16, 185, 129, 0.25);
   --cards-card-link-source-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.4),
-    0 4px 6px -4px rgba(0, 0, 0, 0.3),
+    0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3),
     0 0 0 4px rgba(99, 102, 241, 0.25);
   --cards-card-link-target-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.4),
-    0 4px 6px -4px rgba(0, 0, 0, 0.3),
+    0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3),
     0 0 0 4px rgba(37, 99, 235, 0.3);
   --cards-connector-stroke: #4b5563;
   --cards-parent-connector-stroke: #6b7280;
@@ -130,7 +120,7 @@
   transform: none !important;
 }
 
-.cards-card-canvas__popover {
+.cards-card-canvas__popover:not(.hn-popover--floating) {
   position: absolute;
   z-index: 1;
   pointer-events: none;
@@ -233,6 +223,7 @@
 }
 
 .cards-card-canvas__card-header {
+  position: relative;
   padding: 8px 12px;
   border-bottom: 1px solid var(--cards-card-header-border);
   font-weight: 500;
@@ -240,6 +231,59 @@
   background-color: var(--cards-card-header-bg);
   color: var(--cards-card-header-color);
   cursor: default;
+}
+
+.cards-card-canvas__card-title-edit {
+  display: inline-block;
+  min-width: 1ch;
+  max-width: calc(100% - 24px);
+  outline: none;
+  cursor: text;
+  user-select: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.cards-card-canvas__card-title-edit:focus {
+  overflow: visible;
+  text-overflow: clip;
+  box-shadow: 0 1px 0 var(--cards-card-selected-outline);
+}
+
+.cards-card-canvas__card-menu-button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--cards-card-header-color);
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.cards-card-canvas__card-menu-button:hover,
+.cards-card-canvas__card-menu-button:focus-visible,
+.cards-card-canvas__card-menu-button[aria-expanded='true'] {
+  background: var(--cards-card-border);
+  opacity: 1;
+}
+
+.cards-card-canvas__card-menu-button:focus-visible {
+  outline: 2px solid var(--cards-card-selected-outline);
+  outline-offset: 1px;
+}
+
+.cards-card-canvas__card-menu-button svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 .cards-card-canvas__card-content {
@@ -255,6 +299,27 @@
   color: var(--cards-card-content-color);
   /* 允许长单词/URL 在卡片宽度边界处按单词边界换行，避免撑出卡片 */
   word-wrap: break-word;
+}
+
+.cards-card-canvas__card-note {
+  min-height: 100%;
+  margin: -12px;
+  cursor: text;
+  user-select: text;
+}
+
+/* 卡片只承载笔记正文；标题由卡片 header 编辑，底部工具栏由卡片自身控制。 */
+.cards-card-canvas__card-note .hn-note-hero,
+.cards-card-canvas__card-note .hn-note-bottom-bar {
+  display: none;
+}
+
+.cards-card-canvas__card-note .hn-note-body {
+  min-height: 100%;
+}
+
+.cards-card-canvas__card-menu-popover {
+  width: 180px;
 }
 
 .cards-card-canvas__resize-handle {

@@ -1,6 +1,12 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { CARD_CANVAS_POPOVER_OVERLAY_ATTRIBUTE } from '../../src/utils/card-popover-interactions';
-import { addCard, getCardData, getCardDataById, getRequiredBox } from './helpers';
+import {
+  addCard,
+  enableOption,
+  getCardData,
+  getCardDataById,
+  getRequiredBox,
+} from './helpers';
 
 async function clickBlankCanvas(page: Page): Promise<void> {
   const stageBox = await getRequiredBox(
@@ -12,6 +18,59 @@ async function clickBlankCanvas(page: Page): Promise<void> {
 test.describe('CardCanvas popover interactions', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
+  });
+
+  test('creates a threaded comment in a dialog', async ({ page }) => {
+    // Given: a newly selected card with its Popover actions visible.
+    await addCard(page, 'Card A', 'Content A');
+    const commentButton = page.locator('[data-card-comment-button]');
+    await expect(commentButton).toBeVisible();
+
+    // When: the user opens the comment details and submits a new comment.
+    await commentButton.click();
+    const commentDialog = page.getByRole('dialog', { name: '评论详情' });
+    await expect(commentDialog).toBeVisible();
+    expect(
+      await commentDialog.evaluate(
+        (element) => element.parentElement === document.body
+      )
+    ).toBe(true);
+    await expect(
+      commentDialog.locator('[data-card-comment-panel]')
+    ).toBeVisible();
+    await expect(
+      page.locator('.cards-card-canvas__popover [data-card-comment-panel]')
+    ).toHaveCount(0);
+    await page.locator('[data-card-comment-input]').fill('Looks good to me');
+    await page.locator('[data-card-comment-submit]').click();
+
+    // Then: the comment is rendered and persisted in the card data.
+    await expect(page.locator('[data-card-comment-content]')).toHaveText(
+      'Looks good to me'
+    );
+    await expect(page.locator('[data-card-data-content]')).toContainText(
+      'Looks good to me'
+    );
+  });
+
+  test('closes comment details with Escape without clearing card selection', async ({
+    page,
+  }) => {
+    // Given: a selected card has opened its comment details Dialog.
+    await addCard(page, 'Card A', 'Content A');
+    await page.locator('[data-card-comment-button]').click();
+    const commentDialog = page.getByRole('dialog', { name: '评论详情' });
+    await expect(commentDialog).toBeVisible();
+
+    // When: the user dismisses the Dialog with Escape.
+    await page.keyboard.press('Escape');
+
+    // Then: the Dialog closes while the selected card and its Popover remain available.
+    await expect(commentDialog).toHaveCount(0);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
+    await expect(page.locator('.cards-card-canvas__popover')).toBeVisible();
   });
 
   test('keeps selection when clicking an aria-associated portaled overlay from the popover', async ({
@@ -66,25 +125,66 @@ test.describe('CardCanvas popover interactions', () => {
     await expect(page.locator('.cards-card-canvas__popover')).toHaveCount(0);
   });
 
-  test('allows choosing the Demo child layout select inside the popover', async ({
+  test('allows choosing a child layout from the card more menu', async ({
     page,
   }) => {
-    // Given: a selected card is showing the Demo-owned Popover controls.
+    // Given: direct editing is enabled for a selected card.
     await addCard(page, 'Card A', 'Content A');
-    const layoutSelect = page.locator('[data-card-children-layout-mode-select]');
-    await expect(layoutSelect).toBeVisible();
-    await expect(layoutSelect).toHaveValue('arrange');
+    await enableOption(page, '[data-card-editable-toggle]');
+    await page
+      .locator('[data-card-id="card-1"] [data-card-menu-button]')
+      .click();
+    const option = page.locator(
+      '[data-card-children-layout-mode-option="mind-map-horizontal"]'
+    );
+    await expect(option).toBeVisible();
 
-    // When: the native select is opened and changed through normal user input.
-    // 默认值是 'arrange'（最后一个选项），ArrowDown 不会循环，所以用 ArrowUp 上移到 'mind-map-horizontal'
-    await layoutSelect.click();
-    await page.keyboard.press('ArrowUp');
-    await page.keyboard.press('Enter');
+    // When: the horizontal mind-map menu item is chosen.
+    await option.click();
 
     // Then: the chosen child-layout mode is written back to Demo card data.
-    await expect(layoutSelect).toHaveValue('mind-map-horizontal');
+    await expect(
+      page.locator('[data-card-children-layout-mode-menu]')
+    ).toHaveCount(0);
     const card = getCardDataById(await getCardData(page), 'card-1');
     expect(card.childrenLayoutMode).toBe('mind-map-horizontal');
+  });
+
+  test('mounts the card more menu in document body', async ({ page }) => {
+    // Given: direct editing is enabled for a selected card.
+    await addCard(page, 'Card A', 'Content A');
+    await enableOption(page, '[data-card-editable-toggle]');
+
+    // When: the user opens the card more menu.
+    await page
+      .locator('[data-card-id="card-1"] [data-card-menu-button]')
+      .click();
+    const menu = page.locator('[data-card-children-layout-mode-menu]');
+    await expect(menu).toBeVisible();
+
+    // Then: the shared anchored Popover escapes the overflow-hidden canvas stage.
+    const isMountedInBody = await menu.evaluate((element) => {
+      const popover = element.closest('.cards-card-canvas__popover');
+      return popover?.parentElement === document.body;
+    });
+    expect(isMountedInBody).toBe(true);
+  });
+
+  test('mounts the selected card popover in document body', async ({
+    page,
+  }) => {
+    // Given: a newly created card is selected by the demo.
+    await addCard(page, 'Card A', 'Content A');
+    const popover = page.locator('.cards-card-canvas__popover');
+    await expect(popover).toBeVisible();
+
+    // When: the selected card renders its custom Popover content.
+    const isMountedInBody = await popover.evaluate(
+      (element) => element.parentElement === document.body
+    );
+
+    // Then: the anchored shared Popover is outside the overflow-hidden canvas stage.
+    expect(isMountedInBody).toBe(true);
   });
 
   test('keeps selection when clicking a marked portaled overlay from the popover', async ({
@@ -170,21 +270,44 @@ test.describe('CardCanvas popover interactions', () => {
     await expect(page.locator('.cards-card-canvas__popover')).toHaveCount(0);
   });
 
-  test('keeps selection when clicking the demo popover background', async ({
+  test('keeps the card when popover deletion is cancelled', async ({
     page,
   }) => {
-    // Given: a selected card is showing the Demo popover.
+    // Given: a selected card is showing a components delete button without summary copy.
     await addCard(page, 'Card A', 'Content A');
-    const popoverContent = page.locator('.card-canvas-demo-popover-content');
-    await expect(popoverContent).toBeVisible();
+    const deleteButton = page.locator('[data-card-popover-delete-button]');
+    await expect(deleteButton).toBeVisible();
+    await expect(page.getByText('Selected: Card A')).toHaveCount(0);
 
-    // When: the user clicks a non-control area inside the popover.
-    await popoverContent.click({ position: { x: 4, y: 4 } });
+    // When: the user starts deletion and cancels the components confirmation.
+    await deleteButton.click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
 
-    // Then: the click stays inside the popover and selection remains active.
+    // Then: the card and its selection remain unchanged.
+    await expect(page.locator('[data-card-id="card-1"]')).toBeVisible();
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       'card-1'
     );
-    await expect(page.locator('.cards-card-canvas__popover')).toBeVisible();
+  });
+
+  test('deletes the card after popover deletion is confirmed', async ({
+    page,
+  }) => {
+    // Given: a selected card is showing its Popover delete action.
+    await addCard(page, 'Card A', 'Content A');
+    const deleteButton = page.locator('[data-card-popover-delete-button]');
+    await expect(deleteButton).toBeVisible();
+
+    // When: the user confirms deletion through the components confirmation.
+    await deleteButton.click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
+
+    // Then: the card and stale selection are removed.
+    await expect(page.locator('[data-card-id="card-1"]')).toHaveCount(0);
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
   });
 });
