@@ -22,8 +22,8 @@ The bottom control model follows `@hamster-note/painting`:
 - Shared component themes: `light` and `dark`.
 - Shared component accent: violet by default; hosts may pass a component-library
   preset or any CSS color through the public `themeColor` prop.
-- Default card palette: blue `#3b82f6`, purple `#8b5cf6`, green `#16a34a`,
-  orange `#ea580c`, and rose `#e11d48`; hosts may replace the palette through
+- Default card palette: blue `#60a5fa`, purple `#a78bfa`, green `#4ade80`,
+  orange `#fb923c`, and rose `#fb7185`; hosts may replace the palette through
   the public color-options prop.
 - A themed card uses the selected color on its header. Its body mixes 12% of
   that color with white in light mode and 18% with black in dark mode.
@@ -43,21 +43,27 @@ The bottom control model follows `@hamster-note/painting`:
 - Card titles remain directly editable when editing is enabled; card bodies are
   read-only on the canvas and become editable only in the selected card's
   content Dialog.
+- A card may persist `headless: true` to hide its title bar. Enabling headless
+  mode copies a non-empty title into a blank body once, without clearing title.
+- The selected-card Popover owns card color, headless mode, content editing,
+  comments, and a child-layout submenu. Cards do not render a separate more
+  button.
 - Content Dialog changes are local drafts until Save is chosen; Cancel, Escape,
   and backdrop dismissal leave the card unchanged.
 - Canvas-level controls are hidden while the content Dialog is open so no
   background action can appear above or bypass the modal layer.
 - Locked cards expose a locked state to the DOM and cannot be moved, resized, or
   deleted, including through recursive parent deletion.
-- Outside Link mode, the card header is the sole movement handle. Body text and
-  embedded controls never initiate card movement.
+- Outside Link mode, the whole non-interactive card surface is the movement
+  handle. Card body text is deliberately non-selectable, while title editing,
+  resize handles, links, and buttons remain independent controls.
 - Link mode uses the whole card surface as the link-drag handle while keeping
   link-navigation controls usable. The card itself remains stationary.
 - Each footer link is one row: navigation fills the available width and a
   shared `delete` icon button sits at the far edge. Deletion requires the
   shared danger confirmation and removes both sides of the relationship.
 - Dashed links have a forgiving pointer hit area and a keyboard-focusable
-  midpoint. Selecting either opens an anchored Popover with an icon-only delete
+  midpoint. Selecting either opens an anchored Popover with an icon-and-label delete
   action that removes both sides after shared danger confirmation.
 
 ## 5. Motion
@@ -69,7 +75,9 @@ animation is introduced.
 ## 6. Responsive Behavior
 
 The bottom action remains reachable at 375, 768, and 1280 px viewport widths.
-It must not change canvas dimensions or introduce horizontal overflow.
+Action labels are visible at 768 px and above; below 768 px, responsive actions
+retain their icon and accessible name while hiding only the visual label. This
+must not change canvas dimensions or introduce horizontal overflow.
 
 ## 7. Accessibility
 

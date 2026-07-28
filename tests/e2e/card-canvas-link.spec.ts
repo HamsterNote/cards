@@ -153,7 +153,7 @@ test.describe('CardCanvas link mode', () => {
     await page.mouse.move(0, 0);
     await expect(toolbarToggle).toHaveCSS(
       'background-color',
-      'rgb(96, 165, 250)'
+      'rgb(124, 131, 255)'
     );
     await expect(toolbarToggle).toHaveCSS('color', 'rgb(9, 9, 11)');
   });
@@ -358,7 +358,7 @@ test.describe('CardCanvas link mode', () => {
     });
     await expect(popover).toBeVisible();
     await expect(deleteButton.locator('svg')).toHaveCount(1);
-    await expect(deleteButton).not.toHaveText(/删除/);
+    await expect(deleteButton).toContainText('删除');
 
     // When: deletion is confirmed through the shared danger Dialog.
     await deleteButton.click();

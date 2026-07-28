@@ -54,22 +54,22 @@ test.describe('CardCanvas popover interactions', () => {
     const commentDeleteButton = page.locator('[data-card-comment-delete]');
     await expect(commentDeleteButton).toHaveAttribute('aria-label', '删除评论');
     await expect(commentDeleteButton.locator('svg')).toHaveCount(1);
-    await expect(commentDeleteButton).not.toHaveText(/删除/);
+    await expect(commentDeleteButton).toHaveText(/删除/);
   });
 
   test('keeps the toolbar below card popovers and applies the theme accent', async ({
     page,
   }) => {
-    // Given: the demo passes the blue accent prop and opens a selected-card Popover.
+    // Given: the demo uses its default violet accent and opens a selected-card Popover.
     await addCard(page, 'Card A', 'Content A');
     const toolbar = page.locator('[data-card-canvas-toolbar]');
     const popover = page.locator('.cards-card-canvas__popover');
     await expect(toolbar).toBeVisible();
     await expect(popover).toBeVisible();
 
-    // Then: canvas and portaled actions inherit blue, while the toolbar stays underneath.
-    await expect(toolbar).toHaveCSS('--hn-color-accent', '#60a5fa');
-    await expect(popover).toHaveCSS('--hn-color-accent', '#60a5fa');
+    // Then: canvas and portaled actions inherit violet, while the toolbar stays underneath.
+    await expect(toolbar).toHaveCSS('--hn-color-accent', '#7c83ff');
+    await expect(popover).toHaveCSS('--hn-color-accent', '#7c83ff');
     const [toolbarZIndex, popoverZIndex] = await Promise.all([
       toolbar.evaluate((element) => Number(getComputedStyle(element).zIndex)),
       popover.evaluate((element) => Number(getComputedStyle(element).zIndex)),
@@ -98,14 +98,14 @@ test.describe('CardCanvas popover interactions', () => {
   test('applies light mode and accent tokens to the portaled content dialog panel', async ({
     page,
   }) => {
-    // Given: the light canvas uses its blue accent and opens the content editor.
+    // Given: the light canvas uses its violet accent and opens the content editor.
     await addCard(page, 'Card A', 'Content A');
     await page.locator('[data-card-content-edit-button]').click();
     const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
 
     // Then: the body-portaled panel receives both theme axes itself.
     await expect(dialog).toBeVisible();
-    await expect(dialog).toHaveCSS('--hn-color-accent', '#60a5fa');
+    await expect(dialog).toHaveCSS('--hn-color-accent', '#7c83ff');
     await expect(dialog).toHaveCSS('--hn-color-surface', '#fff');
     await expect(dialog).toHaveCSS('--hn-color-text', '#18181b');
   });
@@ -182,15 +182,16 @@ test.describe('CardCanvas popover interactions', () => {
     await expect(page.locator('.cards-card-canvas__popover')).toHaveCount(0);
   });
 
-  test('allows choosing a child layout from the card more menu', async ({
+  test('allows choosing a child layout from the selected-card popover', async ({
     page,
   }) => {
-    // Given: direct editing is enabled for a selected card.
+    // Given: direct editing is enabled for a selected card on a narrow viewport.
+    await page.setViewportSize({ width: 375, height: 812 });
     await addCard(page, 'Card A', 'Content A');
     await enableOption(page, '[data-card-editable-toggle]');
-    await page
-      .locator('[data-card-id="card-1"] [data-card-menu-button]')
-      .click();
+    const layoutTrigger = page.getByRole('menuitem', { name: '子卡布局' });
+    await expect(layoutTrigger).toBeVisible();
+    await layoutTrigger.click();
     const option = page.locator(
       '[data-card-children-layout-mode-option="mind-map-horizontal"]'
     );
@@ -200,31 +201,101 @@ test.describe('CardCanvas popover interactions', () => {
     await option.click();
 
     // Then: the chosen child-layout mode is written back to Demo card data.
-    await expect(
-      page.locator('[data-card-children-layout-mode-menu]')
-    ).toHaveCount(0);
+    await expect(page.locator('.hn-menu__submenu-panel')).toHaveCount(0);
     const card = getCardDataById(await getCardData(page), 'card-1');
     expect(card.childrenLayoutMode).toBe('mind-map-horizontal');
   });
 
-  test('mounts the card more menu in document body', async ({ page }) => {
+  test('mounts the child-layout submenu in document body', async ({ page }) => {
     // Given: direct editing is enabled for a selected card.
     await addCard(page, 'Card A', 'Content A');
     await enableOption(page, '[data-card-editable-toggle]');
 
-    // When: the user opens the card more menu.
-    await page
-      .locator('[data-card-id="card-1"] [data-card-menu-button]')
-      .click();
-    const menu = page.locator('[data-card-children-layout-mode-menu]');
+    // When: the user opens the child-layout submenu.
+    await page.locator('[data-card-children-layout-button]').click();
+    const menu = page.locator('.hn-menu__submenu-panel');
     await expect(menu).toBeVisible();
+    await expect(menu).toHaveAttribute('data-theme', 'light');
 
     // Then: the shared anchored Popover escapes the overflow-hidden canvas stage.
     const isMountedInBody = await menu.evaluate((element) => {
-      const popover = element.closest('.cards-card-canvas__popover');
-      return popover?.parentElement === document.body;
+      return element.parentElement === document.body;
     });
     expect(isMountedInBody).toBe(true);
+  });
+
+  test('copies an empty title into content once when headless mode is enabled', async ({
+    page,
+  }) => {
+    // Given: the controlled Demo receives a selected card whose body contains only whitespace.
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            {
+              id: 'card-1',
+              title: 'Headless title',
+              content: '   ',
+              x: -90,
+              y: -60,
+              width: 180,
+              height: 120,
+            },
+          ],
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-selected', {
+          detail: ['card-1'],
+        })
+      );
+    });
+    const card = page.locator('[data-card-id="card-1"]');
+    const toggle = page.locator('[data-card-headless-toggle]');
+    await expect(card).toBeVisible();
+    await expect(toggle).toBeVisible();
+
+    // When: headless mode is enabled.
+    await toggle.click();
+
+    // Then: the title remains persisted, its one-time copy becomes content, and the header hides.
+    const headlessCard = getCardDataById(await getCardData(page), 'card-1');
+    expect(headlessCard.title).toBe('Headless title');
+    expect(headlessCard.content).toBe('Headless title');
+    expect(headlessCard.headless).toBe(true);
+    await expect(card.locator('.cards-card-canvas__card-header')).toHaveCount(
+      0
+    );
+
+    // When: headless mode is disabled again.
+    await toggle.click();
+
+    // Then: the header returns without deleting either persisted field.
+    const restoredCard = getCardDataById(await getCardData(page), 'card-1');
+    expect(restoredCard.title).toBe('Headless title');
+    expect(restoredCard.content).toBe('Headless title');
+    expect(restoredCard.headless).toBe(false);
+    await expect(card.locator('.cards-card-canvas__card-header')).toBeVisible();
+  });
+
+  test('updates the canvas accent from presets and valid custom hex input', async ({
+    page,
+  }) => {
+    // Given: the Demo starts with the violet preset.
+    const toolbar = page.locator('[data-card-canvas-toolbar]');
+    await expect(toolbar).toHaveCSS('--hn-color-accent', '#7c83ff');
+
+    // When: the blue preset is chosen.
+    await page.locator('[data-card-theme-accent-option="blue"]').click();
+
+    // Then: the canvas immediately inherits the preset token.
+    await expect(toolbar).toHaveCSS('--hn-color-accent', '#60a5fa');
+
+    // When: a complete custom hex color is entered.
+    await page.locator('[data-card-theme-accent-custom]').fill('#123abc');
+
+    // Then: the custom accent reaches the canvas boundary.
+    await expect(toolbar).toHaveCSS('--hn-color-accent', '#123abc');
   });
 
   test('mounts the selected card popover in document body', async ({

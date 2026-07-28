@@ -296,10 +296,8 @@ test.describe('CardCanvas mind-map data contract', () => {
     await selectCard(page, parentCard.id);
     await enableOption(page, '[data-card-editable-toggle]');
 
-    // When: the top-right menu switches to horizontal mind-map.
-    await page
-      .locator(`${cardLocatorSelector(parentCard.id)} [data-card-menu-button]`)
-      .click();
+    // When: the selected-card Popover switches to horizontal mind-map.
+    await page.locator('[data-card-children-layout-button]').click();
     await page
       .locator('[data-card-children-layout-mode-option="mind-map-horizontal"]')
       .click();
@@ -313,9 +311,7 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(child.y).toBeCloseTo(expectedChildY(parent, [detachedChild], 0), 5);
 
     // When: the mode switches back to free.
-    await page
-      .locator(`${cardLocatorSelector(parentCard.id)} [data-card-menu-button]`)
-      .click();
+    await page.locator('[data-card-children-layout-button]').click();
     await page
       .locator('[data-card-children-layout-mode-option="free"]')
       .click();
@@ -365,13 +361,9 @@ test.describe('CardCanvas mind-map data contract', () => {
       parentCard.id
     );
     await enableOption(page, '[data-card-editable-toggle]');
-    await page
-      .locator(`${cardLocatorSelector(parentCard.id)} [data-card-menu-button]`)
-      .click();
+    await page.locator('[data-card-children-layout-button]').click();
 
-    await expect(
-      page.locator('[data-card-children-layout-mode-menu]')
-    ).toBeVisible();
+    await expect(page.locator('.hn-menu__submenu-panel')).toBeVisible();
 
     // When: clicking on an empty area of the canvas
     await page.mouse.click(0, 0);

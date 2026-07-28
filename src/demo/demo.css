@@ -163,6 +163,63 @@ body {
   cursor: pointer;
 }
 
+.card-canvas-demo-accent {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.card-canvas-demo-accent legend,
+.card-canvas-demo-accent label {
+  margin-bottom: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--demo-muted-color);
+}
+
+.card-canvas-demo-accent__options {
+  display: flex;
+  gap: 8px;
+}
+
+.card-canvas-demo-accent__option {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--demo-input-border);
+  cursor: pointer;
+}
+
+.card-canvas-demo-accent__option[aria-pressed='true'] {
+  border-color: var(--demo-surface-bg);
+  box-shadow:
+    0 0 0 1px var(--demo-text-color),
+    0 0 0 3px var(--demo-surface-bg);
+}
+
+.card-canvas-demo-accent__option:focus-visible {
+  outline: 2px solid var(--demo-input-focus-border);
+  outline-offset: 3px;
+}
+
+.card-canvas-demo-accent input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--demo-input-border);
+  border-radius: 0.5rem;
+  background: var(--demo-surface-bg);
+  color: var(--demo-text-color);
+  font: inherit;
+}
+
+.card-canvas-demo-accent input[aria-invalid='true'] {
+  border-color: #e11d48;
+}
+
 .card-canvas-demo-layout {
   flex-wrap: nowrap;
   align-items: flex-start;

@@ -118,7 +118,9 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
 
     // Then: only selection changes; the host-owned card remains.
     await expect(page.locator('[data-card-id]')).toHaveCount(1);
-    await expect(page.locator('[data-card-id]')).toContainText('Persistent card');
+    await expect(page.locator('[data-card-id]')).toContainText(
+      'Persistent card'
+    );
     await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
   });
 
@@ -159,9 +161,7 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     ]);
   });
 
-  test('invokes the host add action from the keyboard', async ({
-    page,
-  }) => {
+  test('invokes the host add action from the keyboard', async ({ page }) => {
     // Given: the empty canvas toolbar add button.
     const addButton = page.locator('[data-card-canvas-add-button]');
 
@@ -373,7 +373,7 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     expect(resized.height).toBeGreaterThan(lockedCard.height);
   });
 
-  test('keeps the selected popover aligned while virtual paper pans', async ({
+  test('hides the selected popover while virtual paper pans', async ({
     page,
   }) => {
     // Given: a selected card and its anchored Popover on virtual paper.
@@ -383,18 +383,10 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     await page.locator('[data-card-virtual-paper-toggle]').check();
     const card = page.locator('[data-card-id="card-1"]');
     const popover = page.locator(
-      '.cards-card-canvas__popover:has([data-card-popover-delete-button])'
+      '.cards-card-canvas__popover:has([data-card-headless-toggle])'
     );
     const cardBefore = await getRequiredBox(card);
-    const popoverBefore = await getRequiredBox(popover);
-    await popover.evaluate((element) => {
-      const input = document.createElement('input');
-      input.dataset.cardPopoverStateProbe = 'true';
-      input.value = 'preserve me';
-      element.append(input);
-    });
-    const stateProbe = page.locator('[data-card-popover-state-probe]');
-    const probeElement = await stateProbe.elementHandle();
+    await expect(popover).toBeVisible();
     const stageBox = await getRequiredBox(
       page.locator('.card-canvas-demo-stage')
     );
@@ -407,20 +399,14 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     await page.mouse.wheel(70, 45);
     await waitForAnimationFrame(page);
     const cardAfter = await getRequiredBox(card);
-    const popoverAfter = await getRequiredBox(popover);
 
-    // Then: the Popover moves by the same screen-space delta as its card.
+    // Then: the card pans while the stale anchored Popover closes.
     const cardDeltaX = cardAfter.x - cardBefore.x;
     const cardDeltaY = cardAfter.y - cardBefore.y;
     expect(Math.abs(cardDeltaX) + Math.abs(cardDeltaY)).toBeGreaterThan(5);
-    expect(popoverAfter.x - popoverBefore.x).toBeCloseTo(cardDeltaX, 0);
-    expect(popoverAfter.y - popoverBefore.y).toBeCloseTo(cardDeltaY, 0);
-    await expect(stateProbe).toHaveValue('preserve me');
-    expect(
-      await stateProbe.evaluate(
-        (element, originalElement) => element === originalElement,
-        probeElement
-      )
-    ).toBe(true);
+    await expect(popover).toHaveCount(0);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
   });
 });

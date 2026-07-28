@@ -3,6 +3,8 @@ import {
   confirm,
   Dialog,
   Icon,
+  THEME_ACCENTS,
+  type ThemeAccent,
 } from '@hamster-note/components';
 import { useEffect, useState } from 'react';
 import {
@@ -82,6 +84,8 @@ export function Demo() {
   const [editable, setEditable] = useState(true);
   const [virtualPaper, setVirtualPaper] = useState(false);
   const [theme, setTheme] = useState<CardsTheme>('light');
+  const [themeColor, setThemeColor] = useState<ThemeAccent>('violet');
+  const [customThemeColor, setCustomThemeColor] = useState('');
   const [linkCallbackEnabled, setLinkCallbackEnabled] = useState(true);
   const [lastLinkResult, setLastLinkResult] = useState<LastLinkResult | null>(
     null
@@ -412,6 +416,48 @@ export function Demo() {
                 Enable link callback
               </label>
             </div>
+            <fieldset
+              className="card-canvas-demo-accent"
+              data-card-theme-accent
+            >
+              <legend>Theme accent</legend>
+              <div className="card-canvas-demo-accent__options">
+                {Object.entries(THEME_ACCENTS).map(([name, accent]) => (
+                  <button
+                    key={name}
+                    aria-label={`${name} theme accent`}
+                    aria-pressed={themeColor === name}
+                    className="card-canvas-demo-accent__option"
+                    data-card-theme-accent-option={name}
+                    style={{ backgroundColor: accent.accent }}
+                    title={name}
+                    type="button"
+                    onClick={() => {
+                      setThemeColor(name);
+                      setCustomThemeColor('');
+                    }}
+                  />
+                ))}
+              </div>
+              <label htmlFor="card-theme-accent-custom">Custom hex</label>
+              <input
+                aria-invalid={
+                  customThemeColor !== '' &&
+                  !/^#[\da-f]{6}$/i.test(customThemeColor)
+                }
+                data-card-theme-accent-custom
+                id="card-theme-accent-custom"
+                placeholder="#7c83ff"
+                value={customThemeColor}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setCustomThemeColor(nextValue);
+                  if (/^#[\da-f]{6}$/i.test(nextValue)) {
+                    setThemeColor(nextValue.toLowerCase());
+                  }
+                }}
+              />
+            </fieldset>
             <div className="demo__form-group demo__form-group--checkbox">
               <label>
                 <input
@@ -462,7 +508,7 @@ export function Demo() {
                 editable={editable}
                 virtualPaper={virtualPaper}
                 theme={theme}
-                themeColor="blue"
+                themeColor={themeColor}
                 {...(linkCallbackEnabled
                   ? { onLinkClick: handleLinkClick }
                   : {})}

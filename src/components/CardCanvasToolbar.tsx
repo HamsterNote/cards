@@ -38,6 +38,7 @@ export function CardCanvasToolbar({
         onClick={onAddCard}
       >
         <Icon name="add" />
+        <span className="cards-card-canvas__action-label">添加卡片</span>
       </Button>
       <Button
         aria-label={linkMode ? '关闭链接模式' : '开启链接模式'}
@@ -50,6 +51,7 @@ export function CardCanvasToolbar({
         onClick={() => onLinkModeChange(!linkMode)}
       >
         <Icon name="link" />
+        <span className="cards-card-canvas__action-label">链接模式</span>
       </Button>
     </Popover>
   );

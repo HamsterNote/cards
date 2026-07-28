@@ -14,21 +14,21 @@
     0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --cards-card-selected-shadow:
     0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1),
-    0 0 0 4px rgba(59, 130, 246, 0.15);
+    0 0 0 4px color-mix(in srgb, var(--hn-color-accent) 15%, transparent);
   --cards-card-parent-candidate-shadow:
     0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1),
     0 0 0 4px rgba(16, 185, 129, 0.15);
   --cards-card-link-source-shadow:
     0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1),
-    0 0 0 4px rgba(99, 102, 241, 0.15);
+    0 0 0 4px color-mix(in srgb, var(--hn-color-accent) 15%, transparent);
   --cards-card-link-target-shadow:
     0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1),
-    0 0 0 4px rgba(37, 99, 235, 0.2);
+    0 0 0 4px color-mix(in srgb, var(--hn-color-accent) 20%, transparent);
   --cards-connector-stroke: #d1d5db;
-  --cards-parent-connector-stroke: #9ca3af;
+  --cards-parent-connector-stroke: #c1c7d0;
   --cards-link-drag-line-stroke: #9ca3af;
-  --cards-link-drag-line-active-stroke: #2563eb;
-  --cards-link-drag-circle-border: #2563eb;
+  --cards-link-drag-line-active-stroke: var(--hn-color-accent);
+  --cards-link-drag-circle-border: var(--hn-color-accent);
   --cards-link-drag-circle-bg: #ffffff;
   --cards-link-drag-circle-color: #000000;
   --cards-card-header-bg: #f9fafb;
@@ -36,12 +36,24 @@
   --cards-card-header-border: rgba(0, 0, 0, 0.08);
   --cards-card-content-color: #374151;
   --cards-resize-handle-border: rgba(0, 0, 0, 0.2);
-  --cards-link-button-color: #2563eb;
+  --cards-link-button-color: var(--hn-color-accent);
   --cards-card-footer-border: rgba(0, 0, 0, 0.08);
-  --cards-card-selected-outline: rgba(59, 130, 246, 0.6);
+  --cards-card-selected-outline: color-mix(
+    in srgb,
+    var(--hn-color-accent) 60%,
+    transparent
+  );
   --cards-card-parent-candidate-outline: rgba(16, 185, 129, 0.6);
-  --cards-card-link-source-outline: rgba(99, 102, 241, 0.7);
-  --cards-card-link-target-outline: rgba(37, 99, 235, 0.8);
+  --cards-card-link-source-outline: color-mix(
+    in srgb,
+    var(--hn-color-accent) 45%,
+    transparent
+  );
+  --cards-card-link-target-outline: color-mix(
+    in srgb,
+    var(--hn-color-accent) 45%,
+    transparent
+  );
   --cards-link-drag-circle-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
@@ -56,21 +68,21 @@
     0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
   --cards-card-selected-shadow:
     0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3),
-    0 0 0 4px rgba(59, 130, 246, 0.25);
+    0 0 0 4px color-mix(in srgb, var(--hn-color-accent) 25%, transparent);
   --cards-card-parent-candidate-shadow:
     0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3),
     0 0 0 4px rgba(16, 185, 129, 0.25);
   --cards-card-link-source-shadow:
     0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3),
-    0 0 0 4px rgba(99, 102, 241, 0.25);
+    0 0 0 4px color-mix(in srgb, var(--hn-color-accent) 25%, transparent);
   --cards-card-link-target-shadow:
     0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3),
-    0 0 0 4px rgba(37, 99, 235, 0.3);
+    0 0 0 4px color-mix(in srgb, var(--hn-color-accent) 30%, transparent);
   --cards-connector-stroke: #4b5563;
   --cards-parent-connector-stroke: #6b7280;
   --cards-link-drag-line-stroke: #6b7280;
-  --cards-link-drag-line-active-stroke: #60a5fa;
-  --cards-link-drag-circle-border: #60a5fa;
+  --cards-link-drag-line-active-stroke: var(--hn-color-accent);
+  --cards-link-drag-circle-border: var(--hn-color-accent);
   --cards-link-drag-circle-bg: #1f2937;
   --cards-link-drag-circle-color: #ffffff;
   --cards-card-header-bg: #374151;
@@ -78,12 +90,24 @@
   --cards-card-header-border: rgba(255, 255, 255, 0.08);
   --cards-card-content-color: #e5e7eb;
   --cards-resize-handle-border: rgba(255, 255, 255, 0.25);
-  --cards-link-button-color: #60a5fa;
+  --cards-link-button-color: var(--hn-color-accent);
   --cards-card-footer-border: rgba(255, 255, 255, 0.08);
-  --cards-card-selected-outline: rgba(59, 130, 246, 0.7);
+  --cards-card-selected-outline: color-mix(
+    in srgb,
+    var(--hn-color-accent) 70%,
+    transparent
+  );
   --cards-card-parent-candidate-outline: rgba(16, 185, 129, 0.7);
-  --cards-card-link-source-outline: rgba(129, 140, 248, 0.8);
-  --cards-card-link-target-outline: rgba(96, 165, 250, 0.9);
+  --cards-card-link-source-outline: color-mix(
+    in srgb,
+    var(--hn-color-accent) 45%,
+    transparent
+  );
+  --cards-card-link-target-outline: color-mix(
+    in srgb,
+    var(--hn-color-accent) 45%,
+    transparent
+  );
   --cards-link-drag-circle-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
@@ -168,6 +192,18 @@
   pointer-events: auto;
 }
 
+.cards-card-canvas__popover-menu {
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.cards-card-canvas__popover-menu .hn-menu__submenu-trigger {
+  gap: 6px;
+}
+
 .cards-card-canvas__color-options {
   display: flex;
   align-items: center;
@@ -226,6 +262,11 @@
 
 .cards-card-canvas__toolbar .hn-button {
   min-width: 44px;
+  gap: 6px;
+}
+
+.cards-card-canvas__action-label {
+  white-space: nowrap;
 }
 
 .cards-card-canvas__card {
@@ -237,7 +278,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Prevent text selection during drag */
+  -webkit-user-select: none;
   user-select: none;
   transition:
     border-color 0.2s ease,
@@ -337,6 +378,7 @@
   max-width: calc(100% - 24px);
   outline: none;
   cursor: text;
+  -webkit-user-select: text;
   user-select: text;
   white-space: nowrap;
   overflow: hidden;
@@ -350,40 +392,6 @@
   box-shadow: 0 1px 0 var(--cards-card-selected-outline);
 }
 
-.cards-card-canvas__card-menu-button {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  padding: 4px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  opacity: 0.55;
-}
-
-.cards-card-canvas__card-menu-button:hover,
-.cards-card-canvas__card-menu-button:focus-visible,
-.cards-card-canvas__card-menu-button[aria-expanded='true'] {
-  background: var(--cards-card-border);
-  opacity: 1;
-}
-
-.cards-card-canvas__card-menu-button:focus-visible {
-  outline: 2px solid var(--cards-card-selected-outline);
-  outline-offset: 1px;
-}
-
-.cards-card-canvas__card-menu-button svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-
 .cards-card-canvas__card-content {
   appearance: none;
   border: 0;
@@ -395,6 +403,9 @@
   font-family: inherit;
   text-align: left;
   color: var(--cards-card-content-color);
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
   /* 允许长单词/URL 在卡片宽度边界处按单词边界换行，避免撑出卡片 */
   word-wrap: break-word;
 }
@@ -402,8 +413,9 @@
 .cards-card-canvas__card-note {
   min-height: 100%;
   margin: -12px;
-  cursor: text;
-  user-select: text;
+  cursor: inherit;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* 卡片只承载笔记正文；标题由卡片 header 编辑，底部工具栏由卡片自身控制。 */
@@ -418,10 +430,6 @@
 
 .cards-card-canvas__embedded-note .hn-note-body {
   padding: 12px;
-}
-
-.cards-card-canvas__card-menu-popover {
-  width: 180px;
 }
 
 .cards-card-canvas__content-dialog {
@@ -581,4 +589,21 @@
 .cards-card-canvas__card--link-mode .cards-card-canvas__card-content * {
   -webkit-user-select: none;
   user-select: none;
+}
+
+@media (max-width: 767px) {
+  .cards-card-canvas__popover.hn-popover--floating {
+    max-width: calc(100vw - 16px);
+    flex-wrap: nowrap;
+  }
+
+  .cards-card-canvas__popover .hn-button,
+  .cards-card-canvas__popover-menu,
+  .cards-card-canvas__color-options {
+    flex-shrink: 0;
+  }
+
+  .cards-card-canvas__action-label {
+    display: none;
+  }
 }

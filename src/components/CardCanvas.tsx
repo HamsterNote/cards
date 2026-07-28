@@ -3,7 +3,7 @@ import {
   Icon,
   Menu,
   MenuItem,
-  MenuLabel,
+  MenuSubmenu,
   Popover,
   type ThemeAccent,
   ThemeProvider,
@@ -22,6 +22,10 @@ import {
   useState,
 } from 'react';
 import { type CardsTheme, getThemeAccentStyle } from '../theme';
+import {
+  createParagraphBlocksFromText,
+  extractPlainTextFromBlocks,
+} from '../utils/card-content-blocks';
 import {
   getMindMapLayoutMode,
   MIND_MAP_HORIZONTAL_GAP,
@@ -64,6 +68,8 @@ export interface CardCanvasCard {
   title: string;
   /** 卡片内容（纯文本；有 contentBlocks 时作为其纯文本镜像，供搜索/序列化使用） */
   content: string;
+  /** 隐藏标题栏、仅展示正文的 headless 卡片形态。 */
+  headless?: boolean;
   /**
    * 富文本内容块（@hamster-note/notes 的 NoteBlock）。
    * 提供后卡片内容区默认用 NoteContent 只读渲染，并在正文 Dialog 中作为编辑真相源。
@@ -164,7 +170,7 @@ export interface CardCanvasProps {
    * 开启后：
    * - 标题在卡片上直接编辑（纯文本，Enter 提交 / Escape 还原）；
    * - 内容在卡片上只读，通过选中 Popover 的编辑按钮打开 Dialog 修改；
-   * - 卡片右上角显示"更多"菜单（子卡布局选项）。
+   * - 选中 Popover 提供 headless 与子卡布局选项。
    */
   editable?: boolean;
   /**
@@ -205,7 +211,6 @@ function hasCardGeometryChanges(
   });
 }
 
-/** 子卡布局选项的展示文案（更多菜单用） */
 const CHILDREN_LAYOUT_MODE_LABELS: Record<CardChildrenLayoutMode, string> = {
   free: 'Free',
   'mind-map-horizontal': 'Mind-map horizontal',
@@ -218,14 +223,13 @@ const CHILDREN_LAYOUT_MODES: readonly CardChildrenLayoutMode[] = [
   'arrange',
 ];
 
-const CARD_MENU_POPOVER_ID = 'cards-card-canvas-children-layout-menu';
 const DEFAULT_VIEWPORT: CardCanvasViewport = { scale: 1, x: 0, y: 0 };
 const DEFAULT_CARD_COLOR_OPTIONS: readonly CardCanvasColorOption[] = [
-  { name: '蓝色', value: '#3b82f6' },
-  { name: '紫色', value: '#8b5cf6' },
-  { name: '绿色', value: '#16a34a' },
-  { name: '橙色', value: '#ea580c' },
-  { name: '玫红', value: '#e11d48' },
+  { name: '蓝色', value: '#60a5fa' },
+  { name: '紫色', value: '#a78bfa' },
+  { name: '绿色', value: '#4ade80' },
+  { name: '橙色', value: '#fb923c' },
+  { name: '玫红', value: '#fb7185' },
 ];
 
 export function CardCanvas({
@@ -263,17 +267,12 @@ export function CardCanvas({
   const [movingCardId, setMovingCardId] = useState<string | undefined>();
   // 连线拖拽实时状态：拖拽期间存储源头卡片、指针位置、目标卡片
   const [linkDragInfo, setLinkDragInfo] = useState<LinkDragInfo | null>(null);
-  // 当前打开"更多"菜单的卡片 id
-  const [menuCardId, setMenuCardId] = useState<string | undefined>();
   const [contentEditorCardId, setContentEditorCardId] = useState<
     string | undefined
   >();
   // 锚定模式的 Popover 由组件库通过 Portal 挂到 body；用状态保留卡片 DOM 引用以触发定位浮层渲染。
   const [popoverAnchors, setPopoverAnchors] = useState<
     ReadonlyMap<string, HTMLDivElement>
-  >(new Map());
-  const [menuAnchors, setMenuAnchors] = useState<
-    ReadonlyMap<string, HTMLButtonElement>
   >(new Map());
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
   const [popoverVisible, setPopoverVisible] = useState(true);
@@ -317,24 +316,6 @@ export function CardCanvas({
     []
   );
 
-  const setMenuAnchor = useCallback(
-    (cardId: string, anchor: HTMLButtonElement | null) => {
-      setMenuAnchors((anchors) => {
-        const currentAnchor = anchors.get(cardId);
-        if (currentAnchor === anchor) return anchors;
-
-        const nextAnchors = new Map(anchors);
-        if (anchor === null) {
-          nextAnchors.delete(cardId);
-        } else {
-          nextAnchors.set(cardId, anchor);
-        }
-        return nextAnchors;
-      });
-    },
-    []
-  );
-
   const normalizedOptions: Required<CardCanvasOptions> = {
     requireSelectionToMoveResize: options.requireSelectionToMoveResize ?? false,
     selectOnMoveEnd: options.selectOnMoveEnd ?? false,
@@ -359,11 +340,11 @@ export function CardCanvas({
   const getCards = useCallback(() => cardsRef.current, []);
 
   useEffect(() => {
-    if (popoverAnchors.size === 0 && menuAnchors.size === 0) return;
+    if (popoverAnchors.size === 0) return;
 
     // 锚点 Popover 监听 scroll 重新计算位置；画布 transform 本身不会触发该浏览器事件。
     window.dispatchEvent(new CustomEvent('scroll', { detail: viewport }));
-  }, [menuAnchors.size, popoverAnchors.size, viewport]);
+  }, [popoverAnchors.size, viewport]);
 
   useEffect(() => {
     const normalizedCards = normalizeMindMapLayout(cards);
@@ -427,28 +408,6 @@ export function CardCanvas({
     [cards, onCardsChange]
   );
 
-  // 更多菜单打开时，点击菜单按钮/菜单浮层之外的位置关闭菜单
-  useEffect(() => {
-    if (menuCardId === undefined) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (
-        event.target instanceof HTMLElement &&
-        event.target.closest(
-          '[data-card-menu-button], [data-card-menu-popover]'
-        )
-      ) {
-        return;
-      }
-      setMenuCardId(undefined);
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [menuCardId]);
-
   const contentEditorCard = editable
     ? cards.find((card) => card.id === contentEditorCardId)
     : undefined;
@@ -464,7 +423,6 @@ export function CardCanvas({
           onViewportChange={setViewport}
           onInteraction={() => {
             setPopoverVisible(false);
-            setMenuCardId(undefined);
           }}
           containerStyle={{
             width: '100%',
@@ -519,7 +477,6 @@ export function CardCanvas({
                 (selected?.includes(card.id) ?? false) &&
                 !movingCardId;
               const popoverAnchor = popoverAnchors.get(card.id);
-              const menuAnchor = menuAnchors.get(card.id);
 
               // set 回调：将部分数据合并到当前卡片，并触发 onCardsChange
               const setCard = (data: Partial<Omit<CardCanvasCard, 'id'>>) =>
@@ -549,15 +506,9 @@ export function CardCanvas({
                     }
                     theme={theme}
                     onPatchCard={setCard}
-                    isMenuOpen={menuCardId === card.id}
-                    onToggleMenu={(open) =>
-                      setMenuCardId(open ? card.id : undefined)
-                    }
-                    onMenuAnchorChange={setMenuAnchor}
                     onPopoverAnchorChange={setPopoverAnchor}
                     onDraggingChange={(isDragging) => {
                       setMovingCardId(isDragging ? card.id : undefined);
-                      if (isDragging) setMenuCardId(undefined);
                     }}
                     isLinkSource={linkDragInfo?.sourceCardId === card.id}
                     isLinkTarget={linkDragInfo?.targetCardId === card.id}
@@ -595,6 +546,7 @@ export function CardCanvas({
                       anchor={popoverAnchor}
                       anchorOffset={8}
                       className="cards-card-canvas__popover"
+                      placement="top-start"
                       style={themeAccentStyle}
                       theme={theme}
                     >
@@ -630,76 +582,136 @@ export function CardCanvas({
                           </fieldset>
                         ) : null}
                         {editable ? (
-                          <Button
-                            data-card-content-edit-button
-                            size="small"
-                            variant="ghost"
-                            onClick={() => {
-                              setMenuCardId(undefined);
-                              setContentEditorCardId(card.id);
-                            }}
-                          >
-                            编辑内容
-                          </Button>
+                          <>
+                            <Button
+                              data-card-headless-toggle
+                              size="small"
+                              variant="ghost"
+                              aria-label={
+                                card.headless === true
+                                  ? '显示标题栏'
+                                  : '隐藏标题栏'
+                              }
+                              aria-pressed={card.headless === true}
+                              onClick={() => {
+                                const nextHeadless = card.headless !== true;
+                                const contentBlocksContainOnlyText =
+                                  card.contentBlocks?.every(
+                                    (block) =>
+                                      'text' in block &&
+                                      typeof block.text === 'string'
+                                  ) ?? true;
+                                const contentBlocksAreBlank =
+                                  card.contentBlocks === undefined ||
+                                  card.contentBlocks.length === 0 ||
+                                  (contentBlocksContainOnlyText &&
+                                    extractPlainTextFromBlocks(
+                                      card.contentBlocks
+                                    ).trim() === '');
+                                setCard(
+                                  nextHeadless &&
+                                    card.content.trim() === '' &&
+                                    contentBlocksAreBlank
+                                    ? {
+                                        headless: true,
+                                        content: card.title,
+                                        ...(card.contentBlocks === undefined
+                                          ? {}
+                                          : {
+                                              contentBlocks:
+                                                createParagraphBlocksFromText(
+                                                  card.id,
+                                                  card.title
+                                                ),
+                                            }),
+                                      }
+                                    : { headless: nextHeadless }
+                                );
+                              }}
+                            >
+                              <Icon name="type" />
+                              <span className="cards-card-canvas__action-label">
+                                {card.headless === true
+                                  ? '显示标题栏'
+                                  : '隐藏标题栏'}
+                              </span>
+                            </Button>
+                            <Button
+                              data-card-content-edit-button
+                              size="small"
+                              variant="ghost"
+                              aria-label="编辑内容"
+                              onClick={() => setContentEditorCardId(card.id)}
+                            >
+                              <Icon name="edit" />
+                              <span className="cards-card-canvas__action-label">
+                                编辑内容
+                              </span>
+                            </Button>
+                            <Menu
+                              aria-label="卡片操作"
+                              className="cards-card-canvas__popover-menu"
+                            >
+                              <MenuSubmenu
+                                aria-label="子卡布局"
+                                panelTheme={theme}
+                                label={
+                                  <>
+                                    <Icon name="sort" />
+                                    <span className="cards-card-canvas__action-label">
+                                      子卡布局
+                                    </span>
+                                  </>
+                                }
+                                data-card-children-layout-button
+                              >
+                                {CHILDREN_LAYOUT_MODES.map((mode) => {
+                                  const isActive =
+                                    getMindMapLayoutMode(card) === mode;
+                                  return (
+                                    <MenuItem
+                                      key={mode}
+                                      data-card-children-layout-mode-option={
+                                        mode
+                                      }
+                                      data-active={
+                                        isActive ? 'true' : undefined
+                                      }
+                                      shortcut={
+                                        isActive ? (
+                                          <Icon name="check" />
+                                        ) : undefined
+                                      }
+                                      onClick={() =>
+                                        setCard({ childrenLayoutMode: mode })
+                                      }
+                                    >
+                                      {CHILDREN_LAYOUT_MODE_LABELS[mode]}
+                                    </MenuItem>
+                                  );
+                                })}
+                              </MenuSubmenu>
+                            </Menu>
+                          </>
                         ) : null}
                         {onCommentCard === undefined ? null : (
                           <Button
                             data-card-comment-button
                             size="small"
                             variant="ghost"
+                            aria-label={`评论 (${card.comments?.length ?? 0})`}
                             onClick={() => onCommentCard(card)}
                           >
-                            评论 ({card.comments?.length ?? 0})
+                            <Icon name="comment" />
+                            <span className="cards-card-canvas__action-label">
+                              评论 ({card.comments?.length ?? 0})
+                            </span>
                           </Button>
                         )}
                         {renderPopover?.(card, setCard)}
                       </ThemeProvider>
                     </Popover>
                   )}
-                  {editable &&
-                    menuCardId === card.id &&
-                    menuAnchor !== undefined && (
-                      // 菜单锚定到触发按钮，组件库会将其 Portal 到 body。
-                      <Popover
-                        anchor={menuAnchor}
-                        anchorOffset={4}
-                        placement="bottom-end"
-                        id={CARD_MENU_POPOVER_ID}
-                        className="cards-card-canvas__popover cards-card-canvas__card-menu-popover"
-                        data-card-menu-popover
-                        style={themeAccentStyle}
-                        theme={theme}
-                      >
-                        <ThemeProvider accent={themeColor} mode={theme}>
-                          <Menu
-                            aria-label="子卡布局"
-                            data-card-children-layout-mode-menu
-                          >
-                            <MenuLabel>子卡布局</MenuLabel>
-                            {CHILDREN_LAYOUT_MODES.map((mode) => {
-                              const isActive =
-                                getMindMapLayoutMode(card) === mode;
-                              return (
-                                <MenuItem
-                                  key={mode}
-                                  data-card-children-layout-mode-option={mode}
-                                  data-active={isActive ? 'true' : undefined}
-                                  shortcut={
-                                    isActive ? <Icon name="check" /> : undefined
-                                  }
-                                  onClick={() => {
-                                    setCard({ childrenLayoutMode: mode });
-                                    setMenuCardId(undefined);
-                                  }}
-                                >
-                                  {CHILDREN_LAYOUT_MODE_LABELS[mode]}
-                                </MenuItem>
-                              );
-                            })}
-                          </Menu>
-                        </ThemeProvider>
-                      </Popover>
-                    )}
                 </Fragment>
               );
             })}

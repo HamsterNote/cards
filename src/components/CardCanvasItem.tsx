@@ -14,8 +14,8 @@ import {
   type MutableRefObject,
   type ClipboardEvent as ReactClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -44,8 +44,6 @@ import {
   moveCardsFromSnapshot,
 } from '../utils/cards';
 import type { CardCanvasCard, CardCanvasOptions } from './CardCanvas';
-
-const CARD_MENU_POPOVER_ID = 'cards-card-canvas-children-layout-menu';
 
 function getReadableThemeColor(themeColor: string): '#000' | '#fff' {
   const hex = themeColor.slice(1);
@@ -84,22 +82,12 @@ export interface CardCanvasItemProps {
   readonly options: Required<CardCanvasOptions>;
   readonly renderCardTitle?: ((title: string) => ReactNode) | undefined;
   readonly renderCardContent?: ((content: string) => ReactNode) | undefined;
-  /** 是否启用卡片编辑（标题内联编辑 + 正文 Dialog 入口 + 更多菜单） */
   readonly editable: boolean;
   readonly focusTitle: boolean;
   /** 画布主题，透传给 NoteContent */
   readonly theme: CardsTheme;
   /** 将部分数据合并到当前卡片（与画布 Popover 的 set 同一路径，含导图布局归一化） */
   readonly onPatchCard: (data: Partial<Omit<CardCanvasCard, 'id'>>) => void;
-  /** 当前卡片的"更多"菜单是否打开 */
-  readonly isMenuOpen: boolean;
-  /** 切换"更多"菜单开关状态 */
-  readonly onToggleMenu: (open: boolean) => void;
-  /** 将"更多"菜单触发按钮回传给画布，用作 body Portal 的定位锚点 */
-  readonly onMenuAnchorChange: (
-    cardId: string,
-    anchor: HTMLButtonElement | null
-  ) => void;
   /** 将卡片容器回传给画布，用作选中 Popover 的定位锚点 */
   readonly onPopoverAnchorChange: (
     cardId: string,
@@ -130,6 +118,16 @@ export interface CardCanvasItemProps {
 }
 
 const CONTENT_CLICK_MOVE_THRESHOLD_PX = 5;
+const CARD_INTERACTIVE_CONTROL_SELECTOR = [
+  'a[href]',
+  'button',
+  'input',
+  'select',
+  'textarea',
+  '[contenteditable="true"]',
+  '[role="button"]',
+  '[role="link"]',
+].join(',');
 
 export function CardCanvasItem({
   card,
@@ -146,9 +144,6 @@ export function CardCanvasItem({
   focusTitle,
   theme,
   onPatchCard,
-  isMenuOpen,
-  onToggleMenu,
-  onMenuAnchorChange,
   onPopoverAnchorChange,
   isParentCandidate,
   setParentCandidateId,
@@ -192,13 +187,6 @@ export function CardCanvasItem({
   const canMoveOrResizeRef = useRef(canMoveOrResize);
   const isManagedChildDragRef = useRef(false);
   const hasDetachedRef = useRef(false);
-  const setMenuButtonRef = useCallback(
-    (anchor: HTMLButtonElement | null) => {
-      onMenuAnchorChange(card.id, anchor);
-    },
-    [card.id, onMenuAnchorChange]
-  );
-
   useEffect(() => {
     cardPropRef.current = card;
   }, [card]);
@@ -255,10 +243,31 @@ export function CardCanvasItem({
     resizeDragRef.current?.setDisabled();
   }, [canMoveOrResize]);
 
+  const handleCardPointerDownCapture = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    if (
+      !(event.target instanceof Element) ||
+      event.target.closest(CARD_INTERACTIVE_CONTROL_SELECTOR) === null
+    ) {
+      return;
+    }
+
+    dragRef.current?.setDisabled();
+    const resumeDrag = () => {
+      document.removeEventListener('pointerup', resumeDrag, true);
+      document.removeEventListener('pointercancel', resumeDrag, true);
+      if (canMoveOrResizeRef.current) {
+        dragRef.current?.setEnabled();
+      }
+    };
+    document.addEventListener('pointerup', resumeDrag, true);
+    document.addEventListener('pointercancel', resumeDrag, true);
+  };
+
   useEffect(() => {
     const cardEl = cardRef.current;
-    const headerEl = headerRef.current;
-    if (!cardEl || !headerEl) return;
+    if (!cardEl) return;
 
     const getPose = (): Pose => {
       const currentCard = cardPropRef.current;
@@ -271,8 +280,7 @@ export function CardCanvasItem({
       };
     };
 
-    // 普通模式仍只允许标题栏移动卡片；链接模式则让整张卡片成为连线手势热区。
-    const drag = new Drag(linkMode ? cardEl : headerEl, {
+    const drag = new Drag(cardEl, {
       getPose,
       setPose: (_element, pose) => defaultSetPose(cardEl, pose),
     });
@@ -590,7 +598,7 @@ export function CardCanvasItem({
       drag.destroy();
       dragRef.current = null;
     };
-  }, [commitCards, getCards, linkMode, setParentCandidateId]);
+  }, [commitCards, getCards, setParentCandidateId]);
 
   useEffect(() => {
     if (card.lock === true) return;
@@ -720,7 +728,7 @@ export function CardCanvasItem({
   // as interactive elements by static a11y lint, while preserving mouse-only card selection.
   useEffect(() => {
     const contentEl = contentRef.current;
-    const headerEl = headerRef.current;
+    const headerEl = card.headless === true ? null : headerRef.current;
     if (!onSelect || (!contentEl && !headerEl)) return;
 
     const bindClickSelect = (
@@ -733,7 +741,7 @@ export function CardCanvasItem({
       const handlePointerDown = (e: PointerEvent) => {
         if (
           e.target instanceof HTMLElement &&
-          e.target.closest('.cards-card-canvas__link-button')
+          e.target.closest(CARD_INTERACTIVE_CONTROL_SELECTOR)
         ) {
           pointerDownRef.current = null;
           return;
@@ -752,7 +760,7 @@ export function CardCanvasItem({
       const handleClick = (e: MouseEvent) => {
         if (
           e.target instanceof HTMLElement &&
-          e.target.closest('.cards-card-canvas__link-button')
+          e.target.closest(CARD_INTERACTIVE_CONTROL_SELECTOR)
         ) {
           pointerDownRef.current = null;
           return;
@@ -792,7 +800,7 @@ export function CardCanvasItem({
       contentCleanup?.();
       headerCleanup?.();
     };
-  }, [card.id, onSelect]);
+  }, [card.headless, card.id, onSelect]);
 
   const linkedCards = resolveLinkedCards(cards, card.id);
 
@@ -968,8 +976,10 @@ export function CardCanvasItem({
       }${linkMode ? ' cards-card-canvas__card--link-mode' : ''}`}
       data-card-id={card.id}
       data-card-link-mode={linkMode ? 'true' : undefined}
+      data-card-headless={card.headless ? 'true' : undefined}
       data-card-lock={card.lock ? 'true' : undefined}
       aria-disabled={card.lock ? true : undefined}
+      onPointerDownCapture={handleCardPointerDownCapture}
       data-parent-candidate={isParentCandidate ? 'true' : undefined}
       style={{
         left: `${card.x}px`,
@@ -979,56 +989,39 @@ export function CardCanvasItem({
         zIndex: card.zIndex,
       }}
     >
-      <div
-        ref={headerRef}
-        className="cards-card-canvas__card-header"
-        style={titleStyle}
-      >
-        {renderCardTitle ? (
-          renderCardTitle(card.title)
-        ) : editable ? (
-          // biome-ignore lint/a11y/useSemanticElements: 标题需保持行内纯文本样式与自适应宽度，input/textarea 无法等同呈现
-          <span
-            ref={titleEditRef}
-            className="cards-card-canvas__card-title-edit"
-            data-card-title-edit
-            contentEditable
-            role="textbox"
-            aria-label="卡片标题"
-            aria-multiline={false}
-            tabIndex={0}
-            suppressContentEditableWarning
-            spellCheck={false}
-            onBlur={commitTitleEdit}
-            onKeyDown={handleTitleEditKeyDown}
-            onPaste={handleTitleEditPaste}
-            onPointerEnter={suspendCardDrag}
-            onPointerLeave={resumeCardDrag}
-          >
-            {card.title}
-          </span>
-        ) : (
-          card.title
-        )}
-      </div>
-      {editable && (
-        <button
-          type="button"
-          className="cards-card-canvas__card-menu-button"
-          data-card-menu-button
-          aria-label="卡片更多选项"
-          aria-controls={CARD_MENU_POPOVER_ID}
-          aria-expanded={isMenuOpen}
-          ref={setMenuButtonRef}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleMenu(!isMenuOpen);
-          }}
-          onPointerEnter={suspendCardDrag}
-          onPointerLeave={resumeCardDrag}
+      {card.headless === true ? null : (
+        <div
+          ref={headerRef}
+          className="cards-card-canvas__card-header"
+          style={titleStyle}
         >
-          <Icon name="more" />
-        </button>
+          {renderCardTitle ? (
+            renderCardTitle(card.title)
+          ) : editable ? (
+            // biome-ignore lint/a11y/useSemanticElements: 标题需保持行内纯文本样式与自适应宽度，input/textarea 无法等同呈现
+            <span
+              ref={titleEditRef}
+              className="cards-card-canvas__card-title-edit"
+              data-card-title-edit
+              contentEditable
+              role="textbox"
+              aria-label="卡片标题"
+              aria-multiline={false}
+              tabIndex={0}
+              suppressContentEditableWarning
+              spellCheck={false}
+              onBlur={commitTitleEdit}
+              onKeyDown={handleTitleEditKeyDown}
+              onPaste={handleTitleEditPaste}
+              onPointerEnter={suspendCardDrag}
+              onPointerLeave={resumeCardDrag}
+            >
+              {card.title}
+            </span>
+          ) : (
+            card.title
+          )}
+        </div>
       )}
       <div
         ref={contentRef}

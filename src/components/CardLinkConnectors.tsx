@@ -230,6 +230,7 @@ export function CardLinkConnectors({
               }}
             >
               <Icon name="delete" />
+              <span className="cards-card-canvas__action-label">删除</span>
             </Button>
           </ThemeProvider>
         </Popover>

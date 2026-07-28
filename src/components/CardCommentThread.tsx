@@ -87,8 +87,13 @@ export function CardCommentThread({
               <button type="button" onClick={() => onReply(comment.id)}>
                 回复
               </button>
-              <button type="button" onClick={() => onEdit(comment)}>
-                编辑
+              <button
+                aria-label="编辑评论"
+                type="button"
+                onClick={() => onEdit(comment)}
+              >
+                <Icon name="edit" />
+                <span className="cards-card-canvas__action-label">编辑</span>
               </button>
               <button
                 aria-label="删除评论"
@@ -98,6 +103,7 @@ export function CardCommentThread({
                 onClick={() => onDelete(comment.id)}
               >
                 <Icon name="delete" />
+                <span className="cards-card-canvas__action-label">删除</span>
               </button>
             </div>
           </>
