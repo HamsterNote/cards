@@ -40,6 +40,14 @@
   gap: 6px;
 }
 
+.cards-card-comments__meta button[data-card-comment-delete] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+}
+
 .cards-card-comments button {
   border: 0;
   border-radius: 4px;

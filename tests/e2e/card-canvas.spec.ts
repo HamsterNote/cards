@@ -688,6 +688,7 @@ test.describe('CardCanvas custom rendering and options', () => {
   test('renders card title and content through Demo render props', async ({
     page,
   }) => {
+    await disableOption(page, '[data-card-editable-toggle]');
     await addCard(page, 'Rendered Title', 'Rendered Content');
 
     const card = page.locator('[data-card-id]').first();
@@ -877,14 +878,14 @@ test.describe('CardCanvas custom rendering and options', () => {
     await expect(content).toBeVisible();
   });
 
-  test('renders resize handles without an explicit z-index', async ({
+  test('renders resize handles above editable card content', async ({
     page,
   }) => {
     await addCard(page, 'Card A', 'Content A');
 
     const { handle } = getCardParts(page);
 
-    await expect(handle).toHaveCSS('z-index', 'auto');
+    await expect(handle).toHaveCSS('z-index', '2');
   });
 });
 
@@ -1853,24 +1854,158 @@ test.describe('CardCanvas direct editing', () => {
     expectCardPositionUnchanged(before, after);
   });
 
-  test('writes NoteContent paragraph edits to blocks and plain-text content', async ({
+  test('falls back to plain content when persisted content blocks are empty', async ({
     page,
   }) => {
-    // Given: the card body is rendered by editable NoteContent.
-    const paragraph = page
+    // Given: legacy controlled data contains plain text alongside an empty blocks array.
+    const [card] = await getCardData(page);
+    await page.evaluate((legacyCard) => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            {
+              ...legacyCard,
+              content: 'Legacy plain content',
+              contentBlocks: [],
+            },
+          ],
+        })
+      );
+    }, card);
+
+    // When: the user opens and saves the content Dialog without changing the fallback text.
+    const cardBody = page.locator(
+      '[data-card-id="card-1"] [data-card-note-content]'
+    );
+    await expect(cardBody).toContainText('Legacy plain content');
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    await expect(dialog).toContainText('Legacy plain content');
+    await dialog.getByRole('button', { name: '保存' }).click();
+
+    // Then: saving normalizes blocks without erasing the plain-text body.
+    const savedCard = getCardDataById(await getCardData(page), 'card-1');
+    expect(savedCard.content).toBe('Legacy plain content');
+    expect(savedCard.contentBlocks?.[0]?.text).toBe('Legacy plain content');
+  });
+
+  test('adopts controlled content updates until the dialog draft is edited', async ({
+    page,
+  }) => {
+    // Given: the content Dialog is open but the user has not changed its local draft.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    const [card] = await getCardData(page);
+
+    // When: the controlled card receives newer content from outside the Dialog.
+    await page.evaluate((currentCard) => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            {
+              ...currentCard,
+              content: 'Externally updated content',
+              contentBlocks: [
+                {
+                  id: 'card-1-external-p0',
+                  kind: 'paragraph',
+                  text: 'Externally updated content',
+                },
+              ],
+            },
+          ],
+        })
+      );
+    }, card);
+
+    // Then: the untouched editor reflects and saves the latest controlled value.
+    await expect(dialog).toContainText('Externally updated content');
+    await dialog.getByRole('button', { name: '保存' }).click();
+    const savedCard = getCardDataById(await getCardData(page), 'card-1');
+    expect(savedCard.content).toBe('Externally updated content');
+    expect(savedCard.contentBlocks?.[0]?.text).toBe(
+      'Externally updated content'
+    );
+  });
+
+  test('keeps an edited dialog draft when controlled content updates later', async ({
+    page,
+  }) => {
+    // Given: the user has already created a local Dialog draft.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    const paragraph = dialog
       .locator(
-        '[data-card-id="card-1"] [data-card-note-content] [contenteditable="true"]:visible'
+        '[data-card-content-dialog-editor] [contenteditable="true"]:visible'
+      )
+      .first();
+    await paragraph.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Local dialog draft');
+    const [card] = await getCardData(page);
+
+    // When: newer controlled content arrives after the draft became dirty.
+    await page.evaluate((currentCard) => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            {
+              ...currentCard,
+              content: 'Later external content',
+              contentBlocks: [
+                {
+                  id: 'card-1-later-p0',
+                  kind: 'paragraph',
+                  text: 'Later external content',
+                },
+              ],
+            },
+          ],
+        })
+      );
+    }, card);
+    await dialog.getByRole('button', { name: '保存' }).click();
+
+    // Then: the explicit local draft wins and is persisted as both content forms.
+    const savedCard = getCardDataById(await getCardData(page), 'card-1');
+    expect(savedCard.content).toBe('Local dialog draft');
+    expect(savedCard.contentBlocks?.[0]?.text).toBe('Local dialog draft');
+  });
+
+  test('keeps card content read-only and saves NoteContent edits from the dialog', async ({
+    page,
+  }) => {
+    // Given: the card body is readable but has no editable surface on the canvas.
+    const cardBody = page.locator(
+      '[data-card-id="card-1"] [data-card-note-content]'
+    );
+    await expect(cardBody).toContainText('Original content');
+    await expect(cardBody.locator('[contenteditable="true"]')).toHaveCount(0);
+
+    // When: the user opens the selected card's content Dialog and edits its paragraph.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('[data-card-canvas-toolbar]')).toHaveCount(0);
+    await expect(page.locator('[data-card-content-edit-button]')).toHaveCount(
+      0
+    );
+    const paragraph = dialog
+      .locator(
+        '[data-card-content-dialog-editor] [contenteditable="true"]:visible'
       )
       .first();
     await expect(paragraph).toBeVisible();
-
-    // When: the user replaces the paragraph text and leaves the editor.
     await paragraph.click();
     await page.keyboard.press('Control+A');
     await page.keyboard.type('Edited note body');
-    await page.keyboard.press('Tab');
+    await dialog.getByRole('button', { name: '保存' }).click();
 
-    // Then: rich blocks are the truth source and content mirrors their plain text.
+    // Then: rich blocks are persisted and the read-only card mirrors their plain text.
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('[data-card-canvas-toolbar]')).toBeVisible();
+    await expect(page.locator('[data-card-content-edit-button]')).toBeVisible();
+    await expect(cardBody).toContainText('Edited note body');
     await expect
       .poll(
         async () => getCardDataById(await getCardData(page), 'card-1').content
@@ -1878,6 +2013,61 @@ test.describe('CardCanvas direct editing', () => {
       .toBe('Edited note body');
     const card = getCardDataById(await getCardData(page), 'card-1');
     expect(card.contentBlocks?.[0]?.text).toBe('Edited note body');
+  });
+
+  test('discards content dialog edits when cancelled', async ({ page }) => {
+    // Given: the user has changed the content only inside the modal draft.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    const paragraph = dialog
+      .locator(
+        '[data-card-content-dialog-editor] [contenteditable="true"]:visible'
+      )
+      .first();
+    await paragraph.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Discarded draft');
+
+    // When: the user cancels instead of saving.
+    await dialog.getByRole('button', { name: '取消' }).click();
+
+    // Then: the dialog closes and controlled card content remains unchanged.
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.locator('[data-card-id="card-1"] [data-card-note-content]')
+    ).toContainText('Original content');
+    expect(getCardDataById(await getCardData(page), 'card-1').content).toBe(
+      'Original content'
+    );
+  });
+
+  test('discards content dialog edits with Escape and keeps the card selected', async ({
+    page,
+  }) => {
+    // Given: a selected card has an unsaved content draft in the Dialog.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    const paragraph = dialog
+      .locator(
+        '[data-card-content-dialog-editor] [contenteditable="true"]:visible'
+      )
+      .first();
+    await paragraph.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Discarded with Escape');
+
+    // When: the user dismisses the Dialog with Escape.
+    await page.keyboard.press('Escape');
+
+    // Then: the draft is discarded while the selected card remains actionable.
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.locator('[data-card-id="card-1"] [data-card-note-content]')
+    ).toContainText('Original content');
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
+    await expect(page.locator('[data-card-content-edit-button]')).toBeVisible();
   });
 });
 

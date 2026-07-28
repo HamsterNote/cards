@@ -19,17 +19,48 @@ export function createParagraphBlocksFromText(
   return effectiveLines.map((line, index) => ({
     id: `${cardId}-p${index}`,
     kind: 'paragraph',
-    text: line,
+    text: line
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;'),
   }));
 }
 
+/**
+ * 解析卡片用于 NoteContent 的内容块。
+ * 空数组不应遮蔽仍有值的纯文本镜像，否则旧数据会显示为空并在保存时丢失正文。
+ */
+export function resolveCardContentBlocks(
+  cardId: string,
+  content: string,
+  contentBlocks: readonly NoteBlock[] | undefined
+): readonly NoteBlock[] {
+  return contentBlocks !== undefined && contentBlocks.length > 0
+    ? contentBlocks
+    : createParagraphBlocksFromText(cardId, content);
+}
+
 /** 从单个块中提取纯文本；无文本字段的块（图片/卡片/绘图等）返回 undefined。 */
+function htmlTextToPlainText(text: string): string {
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replaceAll('&nbsp;', ' ')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&gt;', '>')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&amp;', '&');
+}
+
 function blockPlainText(block: NoteBlock): string | undefined {
   if ('text' in block && typeof block.text === 'string') {
-    return block.text;
+    return htmlTextToPlainText(block.text);
   }
   if ('title' in block && typeof block.title === 'string') {
-    return block.title;
+    return htmlTextToPlainText(block.title);
   }
   return undefined;
 }

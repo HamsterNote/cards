@@ -1,3 +1,4 @@
+import { Icon } from '@hamster-note/components';
 import type { CardComment } from './CardComments';
 
 interface CommentThreadProps {
@@ -89,8 +90,14 @@ export function CardCommentThread({
               <button type="button" onClick={() => onEdit(comment)}>
                 编辑
               </button>
-              <button type="button" onClick={() => onDelete(comment.id)}>
-                删除
+              <button
+                aria-label="删除评论"
+                data-card-comment-delete
+                title="删除评论"
+                type="button"
+                onClick={() => onDelete(comment.id)}
+              >
+                <Icon name="delete" />
               </button>
             </div>
           </>

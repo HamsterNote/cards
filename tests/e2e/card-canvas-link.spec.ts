@@ -1,4 +1,4 @@
-import { type Page, expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import {
   addCard,
   cardLocatorSelector,
@@ -19,6 +19,7 @@ import {
 } from './helpers';
 
 const LINK_MODE_SELECTOR = '[data-card-link-mode-toggle]';
+const TOOLBAR_LINK_MODE_SELECTOR = '[data-card-canvas-link-mode-button]';
 
 async function createLinkedPair(page: Page): Promise<void> {
   await addCard(page, 'Alpha', 'Alpha content');
@@ -97,8 +98,20 @@ test.describe('CardCanvas link mode', () => {
     const beforeAlpha = getCardDataById(beforeCards, 'card-1');
     const beforeBeta = getCardDataById(beforeCards, 'card-2');
 
-    // When: A is dropped on B while link mode is enabled.
-    await linkDragHeaderToCard(page, 'card-1', 'card-2');
+    // When: A is dragged from its body and dropped on B while link mode is enabled.
+    const targetBox = await getRequiredBox(
+      page.locator(cardLocatorSelector('card-2'))
+    );
+    await dragHandleToPoint(
+      page,
+      page.locator(
+        `${cardLocatorSelector('card-1')} .cards-card-canvas__card-content`
+      ),
+      {
+        x: targetBox.x + targetBox.width / 2,
+        y: targetBox.y + targetBox.height / 2,
+      }
+    );
 
     // Then: the link persists symmetrically while card geometry and selection stay stable.
     const afterCards = await getCardData(page);
@@ -117,6 +130,32 @@ test.describe('CardCanvas link mode', () => {
     await expect(page.locator('[data-card-select-count]')).toHaveText(
       selectCountBefore
     );
+    await expect(page.locator(LINK_MODE_SELECTOR)).not.toBeChecked();
+    await expect(page.locator(TOOLBAR_LINK_MODE_SELECTOR)).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  test('toggles link mode from the bottom toolbar', async ({ page }) => {
+    // Given: link mode starts disabled in both the host control and toolbar.
+    const toolbarToggle = page.locator(TOOLBAR_LINK_MODE_SELECTOR);
+    await expect(page.locator(LINK_MODE_SELECTOR)).not.toBeChecked();
+    await expect(toolbarToggle).toHaveAttribute('aria-pressed', 'false');
+
+    // When: the user enables link mode from the canvas toolbar.
+    await toolbarToggle.click();
+
+    // Then: the controlled host state and toolbar pressed state stay in sync.
+    await expect(page.locator(LINK_MODE_SELECTOR)).toBeChecked();
+    await expect(toolbarToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toolbarToggle).toHaveClass(/hn-button--primary/);
+    await page.mouse.move(0, 0);
+    await expect(toolbarToggle).toHaveCSS(
+      'background-color',
+      'rgb(96, 165, 250)'
+    );
+    await expect(toolbarToggle).toHaveCSS('color', 'rgb(9, 9, 11)');
   });
 
   test('ignores self, empty-canvas, and duplicate link drops', async ({
@@ -159,6 +198,7 @@ test.describe('CardCanvas link mode', () => {
 
     // When: a real link is created and the same A→B gesture is repeated.
     await linkDragHeaderToCard(page, 'card-1', 'card-2');
+    await enableOption(page, LINK_MODE_SELECTOR);
     await linkDragHeaderToCard(page, 'card-1', 'card-2');
 
     // Then: the existing link is not duplicated in data or connector DOM.
@@ -178,10 +218,11 @@ test.describe('CardCanvas link mode', () => {
     // Given: B remains selected after linking, so its renderPopover is visible.
     await createLinkedPair(page);
     await page
-      .locator(
-        `${cardLocatorSelector('card-2')} .cards-card-canvas__card-content`
-      )
-      .click();
+      .locator(cardLocatorSelector('card-2'))
+      .locator('.cards-card-canvas__card-header')
+      .click({
+        position: { x: 4, y: 4 },
+      });
     await expect(page.locator('.cards-card-canvas__popover')).toBeVisible();
 
     // Then: each linked card exposes a reciprocal, styled, SVG-backed footer button.
@@ -227,11 +268,9 @@ test.describe('CardCanvas link mode', () => {
   }) => {
     // Given: two linked cards and card-1 is initially selected.
     await createLinkedPair(page);
-    await page
-      .locator(
-        `${cardLocatorSelector('card-1')} .cards-card-canvas__card-content`
-      )
-      .click();
+    await page.locator(cardLocatorSelector('card-1')).click({
+      position: { x: 4, y: 4 },
+    });
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       'card-1'
     );
@@ -255,19 +294,150 @@ test.describe('CardCanvas link mode', () => {
     );
   });
 
-  test('draws one non-interactive dashed connector from center to center and updates after resize', async ({
+  test('keeps a footer link when deletion confirmation is cancelled', async ({
+    page,
+  }) => {
+    // Given: a linked pair exposes a delete action at the end of its footer row.
+    await createLinkedPair(page);
+    const deleteLink = page.locator(
+      '[data-card-link-delete-source-id="card-1"][data-card-link-delete-target-id="card-2"]'
+    );
+    await expect(deleteLink).toBeVisible();
+
+    // When: deletion is requested and cancelled in the shared confirmation.
+    await deleteLink.click();
+    const dialog = page.getByRole('dialog', { name: '删除链接？' });
+    await dialog.getByRole('button', { name: '取消' }).click();
+
+    // Then: the reciprocal relationship and connector remain unchanged.
+    const cards = await getCardData(page);
+    expect(linkedIds(getCardDataById(cards, 'card-1'))).toEqual(['card-2']);
+    expect(linkedIds(getCardDataById(cards, 'card-2'))).toEqual(['card-1']);
+    await expect(page.locator('[data-card-link-connector]')).toHaveCount(1);
+  });
+
+  test('removes both sides of a footer link after confirmation', async ({
+    page,
+  }) => {
+    // Given: a linked pair exposes reciprocal footer rows.
+    await createLinkedPair(page);
+    const deleteLink = page.locator(
+      '[data-card-link-delete-source-id="card-1"][data-card-link-delete-target-id="card-2"]'
+    );
+
+    // When: link deletion is confirmed through the shared danger dialog.
+    await deleteLink.click();
+    const dialog = page.getByRole('dialog', { name: '删除链接？' });
+    await dialog.getByRole('button', { name: '删除' }).click();
+
+    // Then: both footer rows, both data references, and the connector disappear.
+    const cards = await getCardData(page);
+    expect(linkedIds(getCardDataById(cards, 'card-1'))).toEqual([]);
+    expect(linkedIds(getCardDataById(cards, 'card-2'))).toEqual([]);
+    await expect(page.locator('[data-card-link-footer]')).toHaveCount(0);
+    await expect(page.locator('[data-card-link-connector]')).toHaveCount(0);
+  });
+
+  test('selects a dashed connector and removes its link from an icon popover', async ({
+    page,
+  }) => {
+    // Given: a linked pair renders one connector with an enlarged hit target.
+    await createLinkedPair(page);
+    const connector = page.locator('[data-card-link-connector]');
+    const hitTarget = page.locator('[data-card-link-connector-hit-target]');
+    await expect(connector).toHaveCount(1);
+    await expect(hitTarget).toHaveCount(1);
+
+    // When: the visible dashed connector is selected.
+    await connector.click({ force: true });
+
+    // Then: its anchored Popover exposes an icon-only delete action.
+    const popover = page.locator('[data-card-link-popover]');
+    const deleteButton = popover.getByRole('button', {
+      name: '删除 Alpha 与 Beta 的链接',
+    });
+    await expect(popover).toBeVisible();
+    await expect(deleteButton.locator('svg')).toHaveCount(1);
+    await expect(deleteButton).not.toHaveText(/删除/);
+
+    // When: deletion is confirmed through the shared danger Dialog.
+    await deleteButton.click();
+    const dialog = page.getByRole('dialog', { name: '删除链接？' });
+    await dialog.getByRole('button', { name: '删除' }).click();
+
+    // Then: both data references, footer rows, connector, and Popover disappear.
+    const cards = await getCardData(page);
+    expect(linkedIds(getCardDataById(cards, 'card-1'))).toEqual([]);
+    expect(linkedIds(getCardDataById(cards, 'card-2'))).toEqual([]);
+    await expect(page.locator('[data-card-link-footer]')).toHaveCount(0);
+    await expect(connector).toHaveCount(0);
+    await expect(popover).toHaveCount(0);
+  });
+
+  test('preserves external card updates while connector deletion awaits confirmation', async ({
+    page,
+  }) => {
+    // Given: connector deletion is waiting in its confirmation Dialog.
+    await createLinkedPair(page);
+    await page.locator('[data-card-link-connector]').click({ force: true });
+    await page
+      .locator('[data-card-link-popover]')
+      .getByRole('button', { name: '删除 Alpha 与 Beta 的链接' })
+      .click();
+    const dialog = page.getByRole('dialog', { name: '删除链接？' });
+    await expect(dialog).toBeVisible();
+
+    // When: the host updates another card field before confirming deletion.
+    const externallyUpdatedCards = (await getCardData(page)).map((card) =>
+      card.id === 'card-1' ? { ...card, content: 'Externally updated' } : card
+    );
+    await page.evaluate((nextCards) => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', { detail: nextCards })
+      );
+    }, externallyUpdatedCards);
+    await dialog.getByRole('button', { name: '删除' }).click();
+
+    // Then: the latest host update remains while both link references are removed.
+    const cards = await getCardData(page);
+    expect(getCardDataById(cards, 'card-1').content).toBe('Externally updated');
+    expect(linkedIds(getCardDataById(cards, 'card-1'))).toEqual([]);
+    expect(linkedIds(getCardDataById(cards, 'card-2'))).toEqual([]);
+  });
+
+  test('keeps link navigation but hides destructive controls in read-only mode', async ({
+    page,
+  }) => {
+    // Given: a linked pair is switched to the public read-only mode.
+    await createLinkedPair(page);
+    await disableOption(page, '[data-card-editable-toggle]');
+
+    // Then: navigation and selection remain, while both delete entry points are absent.
+    await expect(page.locator('[data-card-link-source-id]')).toHaveCount(2);
+    await expect(page.locator('[data-card-link-delete-source-id]')).toHaveCount(
+      0
+    );
+    await page.locator('[data-card-link-connector]').click({ force: true });
+    await expect(page.locator('[data-card-link-popover]')).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: '删除链接？' })).toHaveCount(
+      0
+    );
+  });
+
+  test('draws one interactive dashed connector from center to center and updates after resize', async ({
     page,
   }) => {
     // Given: a linked pair is visible.
     await createLinkedPair(page);
 
-    // Then: the connector is unique, dashed, light gray, pointer-transparent, and center-to-center.
+    // Then: the SVG surface stays transparent while its dashed line remains selectable.
     const line = page.locator('[data-card-link-connector]');
     await expect(page.locator('[data-card-link-connectors]')).toHaveCSS(
       'pointer-events',
       'none'
     );
     await expect(line).toHaveCount(1);
+    await expect(line).toHaveCSS('pointer-events', 'stroke');
     await expect(line).toHaveCSS('stroke', 'rgb(209, 213, 219)');
     await expect(line).toHaveCSS('stroke-dasharray', '4px, 4px');
     await expectConnectorMatchesCardCenters(page, 'card-1', 'card-2');
@@ -396,9 +566,8 @@ test.describe('CardCanvas link mode', () => {
 
     // When: the linked target card is deleted from the graph.
     await page
-      .locator(
-        `${cardLocatorSelector('card-2')} .cards-card-canvas__card-content`
-      )
+      .locator(cardLocatorSelector('card-2'))
+      .locator('.cards-card-canvas__card-header')
       .click();
     await page.getByTestId('delete-selected-card').click();
     const dialog = page.getByRole('dialog', { name: 'Delete card?' });

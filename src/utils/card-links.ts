@@ -62,6 +62,27 @@ export function addSymmetricCardLink(
   });
 }
 
+export function removeSymmetricCardLink(
+  cards: readonly CardCanvasCard[],
+  sourceCardId: string,
+  targetCardId: string
+): CardCanvasCard[] {
+  return cards.map((card) => {
+    if (card.id !== sourceCardId && card.id !== targetCardId) {
+      return card;
+    }
+
+    const removedCardId =
+      card.id === sourceCardId ? targetCardId : sourceCardId;
+    return {
+      ...card,
+      linkedCardIds: normalizeLinkedCardIds(card).filter(
+        (linkedCardId) => linkedCardId !== removedCardId
+      ),
+    };
+  });
+}
+
 export function resolveLinkedCards(
   cards: readonly CardCanvasCard[],
   sourceCardId: string

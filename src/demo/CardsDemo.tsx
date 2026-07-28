@@ -1,14 +1,15 @@
 import {
   Button as ComponentsButton,
-  Dialog,
   confirm,
+  Dialog,
+  Icon,
 } from '@hamster-note/components';
 import { useEffect, useState } from 'react';
 import {
   Button,
   CardCanvas,
-  CardComments,
   type CardCanvasCard,
+  CardComments,
   type CardsTheme,
   deleteCards,
 } from '../index';
@@ -48,9 +49,20 @@ function isSetCardsEvent(
   );
 }
 
+function isSetSelectedEvent(event: Event): event is CustomEvent<string[]> {
+  return (
+    event instanceof CustomEvent &&
+    Array.isArray(event.detail) &&
+    event.detail.every((id) => typeof id === 'string')
+  );
+}
+
 export function Demo() {
+  const selectCallbackEnabled =
+    new URLSearchParams(window.location.search).get('onSelect') !== 'false';
   const [cards, setCards] = useState<CardCanvasCard[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [draftCardId, setDraftCardId] = useState<string>();
   const [selectEventCount, setSelectEventCount] = useState(0);
   const [newCardTitle, setNewCardTitle] = useState('');
   const [newCardContent, setNewCardContent] = useState('');
@@ -67,7 +79,7 @@ export function Demo() {
   const [selectNewCardOnAdd, setSelectNewCardOnAdd] = useState(true);
   const [linkMode, setLinkMode] = useState(false);
   const [commentingCardId, setCommentingCardId] = useState<string>();
-  const [editable, setEditable] = useState(false);
+  const [editable, setEditable] = useState(true);
   const [virtualPaper, setVirtualPaper] = useState(false);
   const [theme, setTheme] = useState<CardsTheme>('light');
   const [linkCallbackEnabled, setLinkCallbackEnabled] = useState(true);
@@ -81,12 +93,36 @@ export function Demo() {
         setCards([...event.detail]);
       }
     };
+    const handleSetSelected = (event: Event) => {
+      if (isSetSelectedEvent(event)) {
+        setSelected([...event.detail]);
+      }
+    };
 
     window.addEventListener('card-canvas-demo:set-cards', handleSetCards);
+    window.addEventListener('card-canvas-demo:set-selected', handleSetSelected);
     return () => {
       window.removeEventListener('card-canvas-demo:set-cards', handleSetCards);
+      window.removeEventListener(
+        'card-canvas-demo:set-selected',
+        handleSetSelected
+      );
     };
   }, []);
+
+  useEffect(() => {
+    if (draftCardId === undefined || selected.includes(draftCardId)) return;
+
+    setCards((currentCards) =>
+      currentCards.filter(
+        (card) =>
+          card.id !== draftCardId ||
+          card.title.trim() !== '' ||
+          card.content.trim() !== ''
+      )
+    );
+    setDraftCardId(undefined);
+  }, [draftCardId, selected]);
 
   const handleAddCard = () => {
     if (!newCardTitle.trim() || !newCardContent.trim()) return;
@@ -120,6 +156,26 @@ export function Demo() {
     setNewCardTitle('');
     setNewCardContent('');
     setNewCardParent('');
+  };
+
+  const handleAddDraftCard = () => {
+    const nextIndex = cards.length + 1;
+    const width = 180;
+    const height = 120;
+    const newCard: CardCanvasCard = {
+      id: `card-${nextIndex}`,
+      title: '',
+      content: '',
+      x: -width / 2,
+      y: -height / 2,
+      width,
+      height,
+      zIndex: nextIndex,
+    };
+
+    setCards(normalizeMindMapLayout([...cards, newCard]));
+    setSelected([newCard.id]);
+    setDraftCardId(newCard.id);
   };
 
   const handleSelect = (id: string) => {
@@ -226,14 +282,20 @@ export function Demo() {
               Add Card
             </Button>
             <Button
+              aria-label="Delete selected cards"
               data-testid="delete-selected-card"
               variant="filled"
               size="md"
               theme={theme}
-              disabled={selected.length === 0}
+              disabled={
+                selected.length === 0 ||
+                selected.every(
+                  (id) => cards.find((card) => card.id === id)?.lock === true
+                )
+              }
               onClick={() => handleDeleteCards(selected)}
             >
-              Delete Selected
+              <Icon name="delete" />
             </Button>
             <div className="demo__form-group">
               <label htmlFor="card-title-bg">Title Background</label>
@@ -389,15 +451,18 @@ export function Demo() {
               <CardCanvas
                 cards={cards}
                 onCardsChange={setCards}
+                onAddCard={handleAddDraftCard}
                 selected={selected}
-                onSelect={handleSelect}
+                {...(selectCallbackEnabled ? { onSelect: handleSelect } : {})}
                 onClearSelection={handleClearSelection}
                 className="card-canvas-demo-transform"
                 options={{ requireSelectionToMoveResize, selectOnMoveEnd }}
                 linkMode={linkMode}
+                onLinkModeChange={setLinkMode}
                 editable={editable}
                 virtualPaper={virtualPaper}
                 theme={theme}
+                themeColor="blue"
                 {...(linkCallbackEnabled
                   ? { onLinkClick: handleLinkClick }
                   : {})}
@@ -415,12 +480,14 @@ export function Demo() {
                 renderPopover={(card) => (
                   <>
                     <ComponentsButton
+                      aria-label={`Delete ${card.title || 'untitled card'}`}
                       data-card-popover-delete-button
+                      disabled={card.lock === true}
                       size="small"
                       variant="ghost"
                       onClick={() => handleDeleteCards([card.id])}
                     >
-                      Delete
+                      <Icon name="delete" />
                     </ComponentsButton>
                   </>
                 )}

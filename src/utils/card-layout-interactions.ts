@@ -178,6 +178,9 @@ export function finalizeCardDragLayout(
   if (draggedCard === undefined) {
     return { cards: [...cards], draggedCard: undefined };
   }
+  if (draggedCard.lock === true) {
+    return { cards: [...cards], draggedCard };
+  }
 
   const parentCard =
     draggedCard.parent === undefined
@@ -240,6 +243,11 @@ export function resizeCardWithMindMapNormalization(
   cardId: string,
   dimensions: CardResizeDimensions
 ): CardLayoutUpdateResult {
+  const currentCard = cards.find((card) => card.id === cardId);
+  if (currentCard === undefined || currentCard.lock === true) {
+    return { cards: [...cards], draggedCard: currentCard };
+  }
+
   const nextCards = cards.map((currentCard) => {
     if (currentCard.id !== cardId) return currentCard;
     return {

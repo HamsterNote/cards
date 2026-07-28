@@ -1,10 +1,11 @@
-import { Icon } from '@hamster-note/components';
+import { confirm, Icon } from '@hamster-note/components';
 import { type NoteBlock, NoteContent } from '@hamster-note/notes';
 // notes 富文本编辑器样式：打进本库 dist/cards.css，使用方无需单独引入
 import '@hamster-note/notes/styles.css';
 import {
   Drag,
   DragOperationType,
+  defaultSetPose,
   type Finger,
   FingerOperationType,
   type Pose,
@@ -20,10 +21,7 @@ import {
   useRef,
 } from 'react';
 import type { CardsTheme } from '../theme';
-import {
-  createParagraphBlocksFromText,
-  extractPlainTextFromBlocks,
-} from '../utils/card-content-blocks';
+import { resolveCardContentBlocks } from '../utils/card-content-blocks';
 import {
   getMindMapLayoutMode,
   MIND_MAP_DETACH_THRESHOLD,
@@ -36,6 +34,7 @@ import {
 import {
   addSymmetricCardLink,
   findTopmostLinkTargetId,
+  removeSymmetricCardLink,
   resolveLinkedCards,
 } from '../utils/card-links';
 import type { CardDragPositionSnapshot, ContentInset } from '../utils/cards';
@@ -48,21 +47,46 @@ import type { CardCanvasCard, CardCanvasOptions } from './CardCanvas';
 
 const CARD_MENU_POPOVER_ID = 'cards-card-canvas-children-layout-menu';
 
+function getReadableThemeColor(themeColor: string): '#000' | '#fff' {
+  const hex = themeColor.slice(1);
+  if (
+    !themeColor.startsWith('#') ||
+    (hex.length !== 3 && hex.length !== 6) ||
+    !/^[\da-f]+$/i.test(hex)
+  ) {
+    return '#000';
+  }
+
+  const expanded =
+    hex.length === 3
+      ? `${hex.charAt(0).repeat(2)}${hex.charAt(1).repeat(2)}${hex.charAt(2).repeat(2)}`
+      : hex;
+  const channels = [0, 2, 4].map((offset) => {
+    const value = Number.parseInt(expanded.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance =
+    (channels[0] ?? 0) * 0.2126 +
+    (channels[1] ?? 0) * 0.7152 +
+    (channels[2] ?? 0) * 0.0722;
+
+  return luminance > 0.179 ? '#000' : '#fff';
+}
+
 export interface CardCanvasItemProps {
   readonly card: CardCanvasCard;
   readonly cards: readonly CardCanvasCard[];
-  readonly cardsRef: MutableRefObject<CardCanvasCard[]>;
-  readonly onCardsChangeRef: MutableRefObject<
-    ((nextCards: CardCanvasCard[]) => void) | undefined
-  >;
+  readonly getCards: () => CardCanvasCard[];
+  readonly commitCards?: ((nextCards: CardCanvasCard[]) => void) | undefined;
   readonly viewportScale: number;
   readonly isSelected: boolean;
   readonly onSelect?: ((id: string) => void) | undefined;
   readonly options: Required<CardCanvasOptions>;
   readonly renderCardTitle?: ((title: string) => ReactNode) | undefined;
   readonly renderCardContent?: ((content: string) => ReactNode) | undefined;
-  /** 是否启用卡片直接编辑（标题纯文本内联编辑 + 内容 NoteContent 编辑 + 更多菜单） */
+  /** 是否启用卡片编辑（标题内联编辑 + 正文 Dialog 入口 + 更多菜单） */
   readonly editable: boolean;
+  readonly focusTitle: boolean;
   /** 画布主题，透传给 NoteContent */
   readonly theme: CardsTheme;
   /** 将部分数据合并到当前卡片（与画布 Popover 的 set 同一路径，含导图布局归一化） */
@@ -101,8 +125,8 @@ export interface CardCanvasItemProps {
         targetCardId?: string
       ) => void)
     | undefined;
-  /** 连线拖拽结束时回调 */
-  readonly onLinkDragEnd?: (() => void) | undefined;
+  /** 连线拖拽结束时回调；linked 表示手势命中了有效目标。 */
+  readonly onLinkDragEnd?: ((linked: boolean) => void) | undefined;
 }
 
 const CONTENT_CLICK_MOVE_THRESHOLD_PX = 5;
@@ -110,8 +134,8 @@ const CONTENT_CLICK_MOVE_THRESHOLD_PX = 5;
 export function CardCanvasItem({
   card,
   cards,
-  cardsRef,
-  onCardsChangeRef,
+  getCards,
+  commitCards,
   viewportScale,
   isSelected,
   onSelect,
@@ -119,6 +143,7 @@ export function CardCanvasItem({
   renderCardTitle,
   renderCardContent,
   editable,
+  focusTitle,
   theme,
   onPatchCard,
   isMenuOpen,
@@ -137,6 +162,7 @@ export function CardCanvasItem({
   onLinkDragEnd,
 }: CardCanvasItemProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
   const resizeDragRef = useRef<Drag | null>(null);
@@ -160,9 +186,9 @@ export function CardCanvasItem({
   >(undefined);
   const isLinkDragRef = useRef(false);
   const linkTargetIdRef = useRef<string | undefined>(undefined);
-  const canMoveOrResize = options.requireSelectionToMoveResize
-    ? isSelected
-    : true;
+  const canMoveOrResize =
+    card.lock !== true &&
+    (options.requireSelectionToMoveResize ? isSelected : true);
   const canMoveOrResizeRef = useRef(canMoveOrResize);
   const isManagedChildDragRef = useRef(false);
   const hasDetachedRef = useRef(false);
@@ -231,7 +257,8 @@ export function CardCanvasItem({
 
   useEffect(() => {
     const cardEl = cardRef.current;
-    if (!cardEl) return;
+    const headerEl = headerRef.current;
+    if (!cardEl || !headerEl) return;
 
     const getPose = (): Pose => {
       const currentCard = cardPropRef.current;
@@ -244,7 +271,11 @@ export function CardCanvasItem({
       };
     };
 
-    const drag = new Drag(cardEl, { getPose });
+    // 普通模式仍只允许标题栏移动卡片；链接模式则让整张卡片成为连线手势热区。
+    const drag = new Drag(linkMode ? cardEl : headerEl, {
+      getPose,
+      setPose: (_element, pose) => defaultSetPose(cardEl, pose),
+    });
     dragRef.current = drag;
     if (!canMoveOrResizeRef.current) {
       drag.setDisabled();
@@ -287,7 +318,7 @@ export function CardCanvasItem({
       const cardId = cardPropRef.current.id;
       pointerPointRef.current = localPointerPoint;
       linkTargetIdRef.current = findTopmostLinkTargetId({
-        cards: cardsRef.current,
+        cards: getCards(),
         sourceCardId: cardId,
         point: localPointerPoint,
       });
@@ -334,13 +365,11 @@ export function CardCanvasItem({
       }
 
       onDraggingChangeRef.current?.(true);
-      dragPositionSnapshot = createDragPositionSnapshot(
-        cardsRef.current,
-        cardId
-      );
+      const currentCards = getCards();
+      dragPositionSnapshot = createDragPositionSnapshot(currentCards, cardId);
       const parentCard =
         currentCard.parent !== undefined
-          ? cardsRef.current.find((c) => c.id === currentCard.parent)
+          ? currentCards.find((c) => c.id === currentCard.parent)
           : undefined;
       // mind-map-horizontal 与 arrange 都是「受管控子卡片」：
       // 拖动距离 < 阈值时卡片保持原位（snap-back），>= 阈值时才真正 detach 出父级。
@@ -398,7 +427,7 @@ export function CardCanvasItem({
       }
 
       if (
-        !onCardsChangeRef.current ||
+        commitCards === undefined ||
         !startOp ||
         dragPositionSnapshot.size === 0
       )
@@ -417,17 +446,16 @@ export function CardCanvasItem({
         }
         hasDetachedRef.current = true;
         cardEl.classList.remove('cards-card-canvas__card--drag-pending-detach');
-        const detachedCards = cardsRef.current.map((c) => {
+        const detachedCards = getCards().map((c) => {
           if (c.id !== cardId) return c;
           const detached = { ...c };
           delete detached.parent;
           return detached;
         });
         const normalizedCards = normalizeMindMapLayout(detachedCards);
-        cardsRef.current = normalizedCards;
         cardPropRef.current =
           normalizedCards.find((c) => c.id === cardId) ?? cardPropRef.current;
-        onCardsChangeRef.current(normalizedCards);
+        commitCards(normalizedCards);
         dragPositionSnapshot = createDragPositionSnapshot(
           normalizedCards,
           cardId
@@ -435,7 +463,7 @@ export function CardCanvasItem({
       }
 
       const moveResult = moveCardsFromSnapshot(
-        cardsRef.current,
+        getCards(),
         dragPositionSnapshot,
         {
           draggedCardId: cardId,
@@ -445,7 +473,7 @@ export function CardCanvasItem({
       if (moveResult.draggedCard !== undefined) {
         cardPropRef.current = moveResult.draggedCard;
       }
-      cardsRef.current = moveResult.cards;
+      commitCards(moveResult.cards);
 
       // 正在移动的卡片（拖拽卡片 + 其子级）一律排除出父级候选
       const movingCardIds = new Set<string>(dragPositionSnapshot.keys());
@@ -458,7 +486,6 @@ export function CardCanvasItem({
 
       setParentCandidateId(candidateId);
 
-      onCardsChangeRef.current(moveResult.cards);
       didMoveRef.current = true;
     };
 
@@ -469,23 +496,28 @@ export function CardCanvasItem({
         cardEl.classList.remove('cards-card-canvas__card--drag-pending-detach');
         const sourceCardId = cardPropRef.current.id;
         const targetCardId = linkTargetIdRef.current;
-        if (targetCardId !== undefined && targetCardId !== sourceCardId) {
+        const currentCards = getCards();
+        const linked =
+          targetCardId !== undefined &&
+          targetCardId !== sourceCardId &&
+          currentCards.some((currentCard) => currentCard.id === sourceCardId) &&
+          currentCards.some((currentCard) => currentCard.id === targetCardId);
+        if (linked) {
           const nextCards = addSymmetricCardLink(
-            cardsRef.current,
+            currentCards,
             sourceCardId,
             targetCardId
           );
-          cardsRef.current = nextCards;
           cardPropRef.current =
             nextCards.find((currentCard) => currentCard.id === sourceCardId) ??
             cardPropRef.current;
-          onCardsChangeRef.current?.(nextCards);
+          commitCards?.(nextCards);
         }
 
         resetCardElementToModelPosition();
         window.requestAnimationFrame(resetCardElementToModelPosition);
         onDraggingChangeRef.current?.(false);
-        onLinkDragEndRef.current?.();
+        onLinkDragEndRef.current?.(linked);
         dragPositionSnapshot = new Map();
         pointerPointRef.current = undefined;
         viewportOffsetRef.current = undefined;
@@ -495,9 +527,10 @@ export function CardCanvasItem({
         return;
       }
 
-      if (didMoveRef.current && onCardsChangeRef.current) {
+      if (didMoveRef.current && commitCards !== undefined) {
         const cardId = cardPropRef.current.id;
-        const draggedCard = cardsRef.current.find(
+        const currentCards = getCards();
+        const draggedCard = currentCards.find(
           (currentCard) => currentCard.id === cardId
         );
         const movingCardIds = new Set<string>(dragPositionSnapshot.keys());
@@ -507,7 +540,7 @@ export function CardCanvasItem({
           pointerPointRef.current !== undefined
         ) {
           const layoutResult = finalizeCardDragLayout(
-            cardsRef.current,
+            currentCards,
             cardId,
             pointerPointRef.current,
             movingCardIds,
@@ -518,8 +551,7 @@ export function CardCanvasItem({
           );
           const finalCards = layoutResult.cards;
           cardPropRef.current = layoutResult.draggedCard ?? draggedCard;
-          cardsRef.current = finalCards;
-          onCardsChangeRef.current(finalCards);
+          commitCards(finalCards);
         }
       }
 
@@ -558,9 +590,11 @@ export function CardCanvasItem({
       drag.destroy();
       dragRef.current = null;
     };
-  }, [cardsRef, onCardsChangeRef, setParentCandidateId]);
+  }, [commitCards, getCards, linkMode, setParentCandidateId]);
 
   useEffect(() => {
+    if (card.lock === true) return;
+
     const handleEl = resizeHandleRef.current;
     if (!handleEl) return;
 
@@ -601,9 +635,10 @@ export function CardCanvasItem({
       initialHeight = cardPropRef.current.height;
       // 判断被 resize 的卡片是否为 mindmap 管控子卡片
       const currentCard = cardPropRef.current;
+      const currentCards = getCards();
       const parentCard =
         currentCard.parent !== undefined
-          ? cardsRef.current.find((c) => c.id === currentCard.parent)
+          ? currentCards.find((c) => c.id === currentCard.parent)
           : undefined;
       isManagedChildResize =
         currentCard.parent !== undefined &&
@@ -615,7 +650,7 @@ export function CardCanvasItem({
     const handleMove = (fingers: Finger[]) => {
       if (
         !canMoveOrResizeRef.current ||
-        !onCardsChangeRef.current ||
+        commitCards === undefined ||
         fingers.length === 0
       )
         return;
@@ -639,7 +674,7 @@ export function CardCanvasItem({
       const cardId = cardPropRef.current.id;
 
       const layoutResult = resizeCardWithMindMapNormalization(
-        cardsRef.current,
+        getCards(),
         cardId,
         {
           width: nextWidth,
@@ -649,8 +684,7 @@ export function CardCanvasItem({
       const finalCards = layoutResult.cards;
 
       cardPropRef.current = layoutResult.draggedCard ?? cardPropRef.current;
-      cardsRef.current = finalCards;
-      onCardsChangeRef.current(finalCards);
+      commitCards(finalCards);
     };
 
     dragHandle.addEventListener(DragOperationType.Start, handleStart);
@@ -670,14 +704,13 @@ export function CardCanvasItem({
       dragHandle.destroy();
       resizeDragRef.current = null;
     };
-  }, [cardsRef, onCardsChangeRef, setParentCandidateId]);
+  }, [card.lock, commitCards, getCards, setParentCandidateId]);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const contentPointerDownRef = useRef<{
     readonly x: number;
     readonly y: number;
   } | null>(null);
-  const headerRef = useRef<HTMLDivElement>(null);
   const headerPointerDownRef = useRef<{
     readonly x: number;
     readonly y: number;
@@ -769,7 +802,7 @@ export function CardCanvasItem({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    const sourceCard = cardsRef.current.find((c) => c.id === card.id);
+    const sourceCard = getCards().find((c) => c.id === card.id);
     if (sourceCard !== undefined) {
       onLinkClickRef.current?.(targetCard, sourceCard);
     }
@@ -796,13 +829,33 @@ export function CardCanvasItem({
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       event.stopPropagation();
-      const sourceCard = cardsRef.current.find((c) => c.id === card.id);
+      const sourceCard = getCards().find((c) => c.id === card.id);
       if (sourceCard !== undefined) {
         onLinkClickRef.current?.(targetCard, sourceCard);
       }
       // 键盘触发链接按钮时，同样选中目标卡片
       onSelectRef.current?.(targetCard.id);
     }
+  };
+
+  const handleDeleteLink = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+    targetCard: CardCanvasCard
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (commitCards === undefined) return;
+
+    const confirmed = await confirm({
+      title: '删除链接？',
+      description: `确定要删除与${targetCard.title || '此卡片'}的链接吗？`,
+      confirmText: '删除',
+      cancelText: '取消',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+
+    commitCards(removeSymmetricCardLink(getCards(), card.id, targetCard.id));
   };
 
   // multi-drag 不识别 contentEditable/按钮等交互元素，指针进入编辑/菜单区域时
@@ -817,6 +870,21 @@ export function CardCanvasItem({
   };
 
   const titleEditRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const titleEdit = titleEditRef.current;
+    if (!editable || !focusTitle || titleEdit === null) return;
+
+    titleEdit.focus();
+    const selection = window.getSelection();
+    if (selection === null) return;
+
+    const range = document.createRange();
+    range.selectNodeContents(titleEdit);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, [editable, focusTitle]);
 
   const commitTitleEdit = () => {
     const el = titleEditRef.current;
@@ -861,42 +929,34 @@ export function CardCanvasItem({
     }
   }, [card.title]);
 
-  const showNoteContent = editable || (card.contentBlocks?.length ?? 0) > 0;
+  const showNoteContent =
+    card.content !== '' || (card.contentBlocks?.length ?? 0) > 0;
 
   const noteBlocks = useMemo<readonly NoteBlock[]>(
-    () =>
-      card.contentBlocks ??
-      createParagraphBlocksFromText(card.id, card.content),
+    () => resolveCardContentBlocks(card.id, card.content, card.contentBlocks),
     [card.contentBlocks, card.id, card.content]
   );
 
-  const handleBlocksChange = (blocks: NoteBlock[]) => {
-    // contentBlocks 为真相源；content 同步纯文本镜像
-    onPatchCard({
-      contentBlocks: blocks,
-      content: extractPlainTextFromBlocks(blocks),
-    });
+  const titleStyle: React.CSSProperties = {
+    ...(card.themeColor === undefined
+      ? {}
+      : {
+          backgroundColor: card.themeColor,
+          color: getReadableThemeColor(card.themeColor),
+        }),
+    ...card.titleStyle,
   };
-
-  // NoteContent 包裹层的 pointerenter/leave 用原生绑定，避免静态 a11y lint
-  // 把该 div 误判为交互元素（与上方 bindClickSelect 同一规避手法）。
-  const noteWrapperRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = noteWrapperRef.current;
-    if (!el || !showNoteContent) return;
-    const suspend = () => dragRef.current?.setDisabled();
-    const resume = () => {
-      if (canMoveOrResizeRef.current) {
-        dragRef.current?.setEnabled();
-      }
-    };
-    el.addEventListener('pointerenter', suspend);
-    el.addEventListener('pointerleave', resume);
-    return () => {
-      el.removeEventListener('pointerenter', suspend);
-      el.removeEventListener('pointerleave', resume);
-    };
-  }, [showNoteContent]);
+  const contentStyle: React.CSSProperties = {
+    ...(card.themeColor === undefined
+      ? {}
+      : {
+          backgroundColor:
+            theme === 'dark'
+              ? `color-mix(in srgb, ${card.themeColor} 18%, black)`
+              : `color-mix(in srgb, ${card.themeColor} 12%, white)`,
+        }),
+    ...card.contentStyle,
+  };
 
   return (
     <div
@@ -905,8 +965,11 @@ export function CardCanvasItem({
         isParentCandidate ? ' cards-card-canvas__card--parent-candidate' : ''
       }${isLinkSource ? ' cards-card-canvas__card--link-source' : ''}${
         isLinkTarget ? ' cards-card-canvas__card--link-target' : ''
-      }`}
+      }${linkMode ? ' cards-card-canvas__card--link-mode' : ''}`}
       data-card-id={card.id}
+      data-card-link-mode={linkMode ? 'true' : undefined}
+      data-card-lock={card.lock ? 'true' : undefined}
+      aria-disabled={card.lock ? true : undefined}
       data-parent-candidate={isParentCandidate ? 'true' : undefined}
       style={{
         left: `${card.x}px`,
@@ -919,7 +982,7 @@ export function CardCanvasItem({
       <div
         ref={headerRef}
         className="cards-card-canvas__card-header"
-        style={card.titleStyle}
+        style={titleStyle}
       >
         {renderCardTitle ? (
           renderCardTitle(card.title)
@@ -931,6 +994,7 @@ export function CardCanvasItem({
             data-card-title-edit
             contentEditable
             role="textbox"
+            aria-label="卡片标题"
             aria-multiline={false}
             tabIndex={0}
             suppressContentEditableWarning
@@ -969,22 +1033,23 @@ export function CardCanvasItem({
       <div
         ref={contentRef}
         className="cards-card-canvas__card-content"
-        style={card.contentStyle}
+        style={contentStyle}
       >
         {renderCardContent ? (
           renderCardContent(card.content)
         ) : showNoteContent ? (
           <div
-            ref={noteWrapperRef}
-            className="cards-card-canvas__card-note"
+            className="cards-card-canvas__card-note cards-card-canvas__embedded-note"
             data-card-note-content
           >
             <NoteContent
               blocks={noteBlocks}
               title=""
               theme={theme}
-              editable={editable}
-              onBlocksChange={handleBlocksChange}
+              {...(card.themeColor === undefined
+                ? {}
+                : { themeColor: card.themeColor })}
+              editable={false}
               topPadding={0}
               bottomPadding={0}
             />
@@ -998,46 +1063,53 @@ export function CardCanvasItem({
       {linkedCards.length > 0 && (
         <div className="cards-card-canvas__card-footer" data-card-link-footer>
           {linkedCards.map((targetCard) => (
-            <button
-              key={targetCard.id}
-              type="button"
-              className="cards-card-canvas__link-button"
-              data-card-link-source-id={card.id}
-              data-card-link-target-id={targetCard.id}
-              onClick={(event) => handleLinkButtonClick(event, targetCard)}
-              onPointerDownCapture={handleLinkButtonPointerDown}
-              onPointerDown={handleLinkButtonPointerDown}
-              onMouseDown={handleLinkButtonMouseDown}
-              onKeyDown={(event) => handleLinkButtonKeyDown(event, targetCard)}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
+            <div key={targetCard.id} className="cards-card-canvas__link-row">
+              <button
+                type="button"
+                className="cards-card-canvas__link-button"
+                data-card-link-source-id={card.id}
+                data-card-link-target-id={targetCard.id}
+                onClick={(event) => handleLinkButtonClick(event, targetCard)}
+                onPointerDownCapture={handleLinkButtonPointerDown}
+                onPointerDown={handleLinkButtonPointerDown}
+                onMouseDown={handleLinkButtonMouseDown}
+                onKeyDown={(event) =>
+                  handleLinkButtonKeyDown(event, targetCard)
+                }
               >
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-              </svg>
-              <span>{targetCard.title}</span>
-            </button>
+                <Icon name="link" />
+                <span>{targetCard.title}</span>
+              </button>
+              {commitCards === undefined ? null : (
+                <button
+                  type="button"
+                  className="cards-card-canvas__link-delete-button"
+                  aria-label={`删除与 ${targetCard.title || '未命名卡片'} 的链接`}
+                  data-card-link-delete-source-id={card.id}
+                  data-card-link-delete-target-id={targetCard.id}
+                  onClick={(event) => handleDeleteLink(event, targetCard)}
+                  onPointerDownCapture={handleLinkButtonPointerDown}
+                  onPointerDown={handleLinkButtonPointerDown}
+                  onMouseDown={handleLinkButtonMouseDown}
+                >
+                  <Icon name="delete" />
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
-      <div
-        ref={resizeHandleRef}
-        className={`cards-card-canvas__resize-handle${
-          options.requireSelectionToMoveResize && !isSelected
-            ? ' cards-card-canvas__resize-handle--hidden'
-            : ''
-        }`}
-        data-card-resize-handle
-      />
+      {card.lock ? null : (
+        <div
+          ref={resizeHandleRef}
+          className={`cards-card-canvas__resize-handle${
+            options.requireSelectionToMoveResize && !isSelected
+              ? ' cards-card-canvas__resize-handle--hidden'
+              : ''
+          }`}
+          data-card-resize-handle
+        />
+      )}
     </div>
   );
 }

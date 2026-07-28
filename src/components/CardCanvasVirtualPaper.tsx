@@ -2,11 +2,11 @@ import {
   VirtualPaper,
   VirtualPaperInitialPlacement,
   VirtualPaperInteractionMode,
-  VirtualPaperRenderMode,
   type VirtualPaperProps,
+  VirtualPaperRenderMode,
   type VirtualPaperTransform,
 } from '@hamster-note/virtual-paper';
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 
 export type CardCanvasVirtualPaperInteraction =
   | 'mouseWheelZoom'
@@ -47,7 +47,7 @@ const INTERACTION_MODE_BY_OPTION = {
   (typeof VirtualPaperInteractionMode)[keyof typeof VirtualPaperInteractionMode]
 >;
 
-type CardCanvasViewport = {
+export type CardCanvasViewport = {
   readonly scale: number;
   readonly x: number;
   readonly y: number;
@@ -57,7 +57,8 @@ const DEFAULT_VIEWPORT: CardCanvasViewport = { scale: 1, x: 0, y: 0 };
 
 export type CardCanvasVirtualPaperProps = {
   readonly virtualPaper?: boolean | CardCanvasVirtualPaperOptions | undefined;
-  readonly onScaleChange: (scale: number) => void;
+  readonly onViewportChange: (viewport: CardCanvasViewport) => void;
+  readonly onInteraction: () => void;
   readonly containerStyle: CSSProperties;
   readonly children: ReactNode;
 };
@@ -109,7 +110,8 @@ function toInitialPlacementProp(
 
 export function CardCanvasVirtualPaper({
   virtualPaper,
-  onScaleChange,
+  onViewportChange,
+  onInteraction,
   containerStyle,
   children,
 }: CardCanvasVirtualPaperProps) {
@@ -117,8 +119,8 @@ export function CardCanvasVirtualPaper({
   const enabled = isEnabled(virtualPaper);
 
   useEffect(() => {
-    onScaleChange(enabled ? viewport.scale : DEFAULT_VIEWPORT.scale);
-  }, [enabled, onScaleChange, viewport.scale]);
+    onViewportChange(enabled ? viewport : DEFAULT_VIEWPORT);
+  }, [enabled, onViewportChange, viewport]);
 
   if (!enabled) {
     return children;
@@ -128,6 +130,7 @@ export function CardCanvasVirtualPaper({
   return (
     <VirtualPaper
       {...toVirtualPaperProps(options, viewport, (nextViewport) => {
+        onInteraction();
         setViewport(nextViewport);
       })}
       containerStyle={containerStyle}

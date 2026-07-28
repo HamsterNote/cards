@@ -1,5 +1,6 @@
 const CARD_CANVAS_INTERACTIVE_CLASS_NAMES = new Set([
   'cards-card-canvas__card',
+  'cards-card-canvas__content-dialog',
   'cards-card-canvas__popover',
 ]);
 
@@ -8,6 +9,9 @@ export const CARD_CANVAS_POPOVER_OVERLAY_ATTRIBUTE =
 
 const CARD_CANVAS_POPOVER_SELECTOR = '.cards-card-canvas__popover';
 const CARD_CANVAS_PORTALED_POPOVER_OVERLAY_SELECTOR = `[${CARD_CANVAS_POPOVER_OVERLAY_ATTRIBUTE}]`;
+// NoteContent 的文字工具条通过 Portal 挂载到 body。它仍属于卡片内编辑流程，
+// 点击工具条不应被当作画布外点击，否则会意外清空当前卡片选择。
+const CARD_CANVAS_NOTE_POPOVER_SELECTOR = '.hn-note-popover';
 const CARD_CANVAS_PORTALED_OVERLAY_ROLE_SELECTOR = [
   'dialog',
   'grid',
@@ -44,6 +48,14 @@ function pathContainsMarkedPopoverOverlay(
     (target) =>
       target instanceof HTMLElement &&
       target.closest(CARD_CANVAS_PORTALED_POPOVER_OVERLAY_SELECTOR) !== null
+  );
+}
+
+function pathContainsNotePopover(path: readonly EventTarget[]): boolean {
+  return path.some(
+    (target) =>
+      target instanceof HTMLElement &&
+      target.closest(CARD_CANVAS_NOTE_POPOVER_SELECTOR) !== null
   );
 }
 
@@ -115,6 +127,7 @@ export function isCardCanvasInteractivePointerTarget(
   return (
     pathContainsCardCanvasElement(path) ||
     pathContainsMarkedPopoverOverlay(path) ||
+    pathContainsNotePopover(path) ||
     pathContainsCommonPortaledOverlay(path) ||
     pathContainsPopoverAssociatedOverlay(path)
   );

@@ -153,10 +153,30 @@ export function createDragPositionSnapshot(
   cards: readonly CardCanvasCard[],
   draggedCardId: string
 ): CardDragPositionSnapshot {
-  const movingCardIds = new Set([
-    draggedCardId,
-    ...getDescendantIds(cards, draggedCardId),
-  ]);
+  const draggedCard = cards.find((card) => card.id === draggedCardId);
+  if (draggedCard === undefined || draggedCard.lock === true) {
+    return new Map();
+  }
+
+  const cardsById = new Map(cards.map((card) => [card.id, card]));
+  const childrenByParent = buildChildrenByParent(cards);
+  const movingCardIds = new Set<string>([draggedCardId]);
+  const pendingIds = [...(childrenByParent.get(draggedCardId) ?? [])];
+
+  while (pendingIds.length > 0) {
+    const cardId = pendingIds.shift();
+    if (cardId === undefined || movingCardIds.has(cardId)) {
+      continue;
+    }
+
+    const card = cardsById.get(cardId);
+    if (card === undefined || card.lock === true) {
+      continue;
+    }
+
+    movingCardIds.add(cardId);
+    pendingIds.push(...(childrenByParent.get(cardId) ?? []));
+  }
 
   return new Map(
     cards
@@ -173,7 +193,7 @@ export function moveCardsFromSnapshot(
   let draggedCard: CardCanvasCard | undefined;
   const nextCards = cards.map((card) => {
     const startPosition = snapshot.get(card.id);
-    if (startPosition === undefined) return card;
+    if (startPosition === undefined || card.lock === true) return card;
 
     const nextCard = {
       ...card,
@@ -200,6 +220,9 @@ export function assignParentFromPoint(
   const currentDraggedCard = cards.find((card) => card.id === draggedCardId);
   if (currentDraggedCard === undefined) {
     return { cards: [...cards], draggedCard: undefined };
+  }
+  if (currentDraggedCard.lock === true) {
+    return { cards: [...cards], draggedCard: currentDraggedCard };
   }
 
   const candidateId = findParentCandidateId(
@@ -279,7 +302,7 @@ export function expandParentToContainChildren(
   inset: ContentInset
 ): CardCanvasCard[] {
   const parent = cards.find((card) => card.id === parentId);
-  if (parent === undefined) return [...cards];
+  if (parent === undefined || parent.lock === true) return [...cards];
 
   const children = cards.filter((card) => card.parent === parentId);
   if (children.length === 0) return [...cards];
@@ -311,7 +334,9 @@ function normalizeDeleteIds(
   cards: readonly CardCanvasCard[],
   deleteIds: readonly string[]
 ): string[] {
-  const existingIds = new Set(cards.map((card) => card.id));
+  const deletableIds = new Set(
+    cards.filter((card) => card.lock !== true).map((card) => card.id)
+  );
   const seenDeleteIds = new Set<string>();
   const normalizedDeleteIds: string[] = [];
 
@@ -319,7 +344,7 @@ function normalizeDeleteIds(
     if (
       deleteId === '' ||
       seenDeleteIds.has(deleteId) ||
-      !existingIds.has(deleteId)
+      !deletableIds.has(deleteId)
     ) {
       continue;
     }
@@ -336,11 +361,26 @@ function expandDeleteIds(
   requestedDeleteIds: readonly string[]
 ): Set<string> {
   const expandedDeleteIds = new Set<string>();
+  const cardsById = new Map(cards.map((card) => [card.id, card]));
+  const childrenByParent = buildChildrenByParent(cards);
 
   for (const deleteId of requestedDeleteIds) {
-    expandedDeleteIds.add(deleteId);
-    for (const descendantId of getDescendantIds(cards, deleteId)) {
-      expandedDeleteIds.add(descendantId);
+    const pendingIds = [deleteId];
+    while (pendingIds.length > 0) {
+      const currentId = pendingIds.shift();
+      if (currentId === undefined || expandedDeleteIds.has(currentId)) {
+        continue;
+      }
+
+      const currentCard = cardsById.get(currentId);
+      if (currentCard === undefined || currentCard.lock === true) {
+        continue;
+      }
+
+      expandedDeleteIds.add(currentId);
+      for (const childId of childrenByParent.get(currentId) ?? []) {
+        pendingIds.push(childId);
+      }
     }
   }
 
@@ -348,12 +388,10 @@ function expandDeleteIds(
 }
 
 function hasRequestedChildren(
-  cards: readonly CardCanvasCard[],
+  expandedDeleteIds: ReadonlySet<string>,
   requestedDeleteIds: readonly string[]
 ): boolean {
-  return requestedDeleteIds.some(
-    (deleteId) => getDescendantIds(cards, deleteId).length > 0
-  );
+  return expandedDeleteIds.size > requestedDeleteIds.length;
 }
 
 export async function deleteCards(
@@ -376,7 +414,11 @@ export async function deleteCards(
     return cards;
   }
 
-  const hasChildren = hasRequestedChildren(cards, normalizedDeleteIds);
+  const expandedDeleteIds = expandDeleteIds(cards, normalizedDeleteIds);
+  const hasChildren = hasRequestedChildren(
+    expandedDeleteIds,
+    normalizedDeleteIds
+  );
   const shouldDelete =
     callback === undefined
       ? true
@@ -386,6 +428,16 @@ export async function deleteCards(
     return cards;
   }
 
-  const expandedDeleteIds = expandDeleteIds(cards, normalizedDeleteIds);
-  return cards.filter((card) => !expandedDeleteIds.has(card.id));
+  return cards.flatMap((card) => {
+    if (expandedDeleteIds.has(card.id)) return [];
+    if (
+      normalizeParentId(card.parent) !== undefined &&
+      expandedDeleteIds.has(card.parent ?? '')
+    ) {
+      const detachedCard = { ...card };
+      delete detachedCard.parent;
+      return [detachedCard];
+    }
+    return [card];
+  });
 }

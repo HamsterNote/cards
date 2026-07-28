@@ -51,6 +51,63 @@ test.describe('CardCanvas popover interactions', () => {
     await expect(page.locator('[data-card-data-content]')).toContainText(
       'Looks good to me'
     );
+    const commentDeleteButton = page.locator('[data-card-comment-delete]');
+    await expect(commentDeleteButton).toHaveAttribute('aria-label', '删除评论');
+    await expect(commentDeleteButton.locator('svg')).toHaveCount(1);
+    await expect(commentDeleteButton).not.toHaveText(/删除/);
+  });
+
+  test('keeps the toolbar below card popovers and applies the theme accent', async ({
+    page,
+  }) => {
+    // Given: the demo passes the blue accent prop and opens a selected-card Popover.
+    await addCard(page, 'Card A', 'Content A');
+    const toolbar = page.locator('[data-card-canvas-toolbar]');
+    const popover = page.locator('.cards-card-canvas__popover');
+    await expect(toolbar).toBeVisible();
+    await expect(popover).toBeVisible();
+
+    // Then: canvas and portaled actions inherit blue, while the toolbar stays underneath.
+    await expect(toolbar).toHaveCSS('--hn-color-accent', '#60a5fa');
+    await expect(popover).toHaveCSS('--hn-color-accent', '#60a5fa');
+    const [toolbarZIndex, popoverZIndex] = await Promise.all([
+      toolbar.evaluate((element) => Number(getComputedStyle(element).zIndex)),
+      popover.evaluate((element) => Number(getComputedStyle(element).zIndex)),
+    ]);
+    expect(toolbarZIndex).toBeLessThan(popoverZIndex);
+  });
+
+  test('keeps small toolbar buttons the same height as small popover buttons', async ({
+    page,
+  }) => {
+    // Given: both shared Popovers render their small Button variants.
+    await addCard(page, 'Card A', 'Content A');
+    const toolbarButton = page
+      .locator('[data-card-canvas-toolbar] .hn-button')
+      .first();
+    const popoverButton = page.locator('[data-card-content-edit-button]');
+
+    // Then: the canvas must not override one small Button to a taller visual size.
+    const [toolbarBox, popoverBox] = await Promise.all([
+      getRequiredBox(toolbarButton),
+      getRequiredBox(popoverButton),
+    ]);
+    expect(toolbarBox.height).toBe(popoverBox.height);
+  });
+
+  test('applies light mode and accent tokens to the portaled content dialog panel', async ({
+    page,
+  }) => {
+    // Given: the light canvas uses its blue accent and opens the content editor.
+    await addCard(page, 'Card A', 'Content A');
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+
+    // Then: the body-portaled panel receives both theme axes itself.
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveCSS('--hn-color-accent', '#60a5fa');
+    await expect(dialog).toHaveCSS('--hn-color-surface', '#fff');
+    await expect(dialog).toHaveCSS('--hn-color-text', '#18181b');
   });
 
   test('closes comment details with Escape without clearing card selection', async ({
@@ -187,6 +244,54 @@ test.describe('CardCanvas popover interactions', () => {
     expect(isMountedInBody).toBe(true);
   });
 
+  test('hides the selected-card popover when virtual paper scrolls', async ({
+    page,
+  }) => {
+    // Given: virtual paper contains a selected card with an open Popover.
+    await enableOption(page, '[data-card-virtual-paper-toggle]');
+    await addCard(page, 'Card A', 'Content A');
+    const popover = page.locator('.cards-card-canvas__popover');
+    await expect(popover).toBeVisible();
+    const stageBox = await getRequiredBox(
+      page.locator('.card-canvas-demo-stage')
+    );
+    await page.mouse.move(stageBox.x + 30, stageBox.y + 30);
+
+    // When: the user scrolls to pan the virtual paper.
+    await page.mouse.wheel(0, 80);
+
+    // Then: the Popover hides without clearing the selected card.
+    await expect(popover).toHaveCount(0);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
+  });
+
+  test('hides the selected-card popover when virtual paper zooms', async ({
+    page,
+  }) => {
+    // Given: virtual paper contains a selected card with an open Popover.
+    await enableOption(page, '[data-card-virtual-paper-toggle]');
+    await addCard(page, 'Card A', 'Content A');
+    const popover = page.locator('.cards-card-canvas__popover');
+    await expect(popover).toBeVisible();
+    const stageBox = await getRequiredBox(
+      page.locator('.card-canvas-demo-stage')
+    );
+    await page.mouse.move(stageBox.x + 30, stageBox.y + 30);
+
+    // When: the user holds Control and wheels to zoom the virtual paper.
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -80);
+    await page.keyboard.up('Control');
+
+    // Then: the Popover hides without clearing the selected card.
+    await expect(popover).toHaveCount(0);
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
+  });
+
   test('keeps selection when clicking a marked portaled overlay from the popover', async ({
     page,
   }) => {
@@ -277,6 +382,8 @@ test.describe('CardCanvas popover interactions', () => {
     await addCard(page, 'Card A', 'Content A');
     const deleteButton = page.locator('[data-card-popover-delete-button]');
     await expect(deleteButton).toBeVisible();
+    await expect(deleteButton.locator('svg')).toHaveCount(1);
+    await expect(deleteButton).not.toHaveText(/Delete/);
     await expect(page.getByText('Selected: Card A')).toHaveCount(0);
 
     // When: the user starts deletion and cancels the components confirmation.

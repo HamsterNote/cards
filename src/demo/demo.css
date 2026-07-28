@@ -190,8 +190,8 @@ body {
   inset: 0;
 }
 
-/* Demo 中给 CardCanvas wrapper 添加偏移，展示 className 透传能力 */
-.card-canvas-demo-transform {
+/* Demo 通过透传 className 偏移画布内容，底栏仍固定在 CardCanvas 容器内。 */
+.card-canvas-demo-transform .cards-card-canvas__container {
   transform: translate(50%, 50%);
 }
 
