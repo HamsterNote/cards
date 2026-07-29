@@ -142,6 +142,7 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     await expect(page.locator('[data-card-id]')).toContainText(
       'Committed live title'
     );
+    expect((await getCardData(page))[0]?.title).toBe('Committed live title');
   });
 
   test('preserves an existing card when another Demo form card is added', async ({
@@ -172,6 +173,56 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     // Then: a blank draft is created and its title editor receives focus.
     await expect(page.locator('[data-card-id]')).toHaveCount(1);
     await expect(page.locator('[data-card-title-edit]')).toBeFocused();
+  });
+
+  test('persists a toolbar draft title without requiring Enter', async ({
+    page,
+  }) => {
+    // Given: the toolbar creates a selected blank draft and focuses its title.
+    await page.locator('[data-card-canvas-add-button]').click();
+    const title = page.locator('[data-card-title-edit]');
+    await expect(title).toBeFocused();
+
+    // When: the user types a title and immediately clicks blank canvas without Enter.
+    await title.fill('Saved while typing');
+    await clickBlankCanvas(page);
+
+    // Then: the draft is retained and its title is already in controlled card data.
+    await expect(page.locator('[data-card-id]')).toHaveCount(1);
+    await expect(page.locator('[data-card-id]')).toContainText(
+      'Saved while typing'
+    );
+    expect((await getCardData(page))[0]?.title).toBe('Saved while typing');
+  });
+
+  test('clears selection from blank virtual paper', async ({ page }) => {
+    // Given: a selected card is hosted inside virtual paper.
+    await page.locator('[data-card-virtual-paper-toggle]').check();
+    await addCardFromDemoForm(page, 'Virtual selection');
+    await expect(page.locator('[data-card-selected-display]')).not.toBeEmpty();
+
+    // When: the user clicks a blank point on the virtual paper surface.
+    await clickBlankCanvas(page);
+
+    // Then: controlled selection is cleared just like the regular canvas.
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+  });
+
+  test('clears selection from a blank virtual paper touch pointer', async ({
+    page,
+  }) => {
+    // Given: virtual paper contains a selected card.
+    await page.locator('[data-card-virtual-paper-toggle]').check();
+    await addCardFromDemoForm(page, 'Touch selection');
+
+    // When: a touch pointer starts on blank virtual paper.
+    await page.locator('[data-card-virtual-paper="true"]').dispatchEvent(
+      'pointerdown',
+      { pointerType: 'touch', pointerId: 7, button: 0, bubbles: true }
+    );
+
+    // Then: controlled selection is cleared through the same single document path.
+    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
   });
 
   test('preserves edited body content when controlled selection is cleared', async ({
@@ -373,7 +424,7 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     expect(resized.height).toBeGreaterThan(lockedCard.height);
   });
 
-  test('hides the selected popover while virtual paper pans', async ({
+  test('repositions the selected popover while virtual paper pans', async ({
     page,
   }) => {
     // Given: a selected card and its anchored Popover on virtual paper.
@@ -387,6 +438,7 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     );
     const cardBefore = await getRequiredBox(card);
     await expect(popover).toBeVisible();
+    const popoverBefore = await getRequiredBox(popover);
     const stageBox = await getRequiredBox(
       page.locator('.card-canvas-demo-stage')
     );
@@ -400,11 +452,20 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     await waitForAnimationFrame(page);
     const cardAfter = await getRequiredBox(card);
 
-    // Then: the card pans while the stale anchored Popover closes.
+    // Then: the card and its anchored Popover move together.
     const cardDeltaX = cardAfter.x - cardBefore.x;
     const cardDeltaY = cardAfter.y - cardBefore.y;
     expect(Math.abs(cardDeltaX) + Math.abs(cardDeltaY)).toBeGreaterThan(5);
-    await expect(popover).toHaveCount(0);
+    await expect(popover).toBeVisible();
+    await expect
+      .poll(async () => {
+        const popoverAfter = await getRequiredBox(popover);
+        return (
+          Math.abs(popoverAfter.x - popoverBefore.x) +
+          Math.abs(popoverAfter.y - popoverBefore.y)
+        );
+      })
+      .toBeGreaterThan(5);
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       'card-1'
     );

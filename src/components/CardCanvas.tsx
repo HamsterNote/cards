@@ -14,10 +14,12 @@ import '@hamster-note/components/styles.css';
 import type { NoteBlock } from '@hamster-note/notes';
 import {
   type CSSProperties,
+  forwardRef,
   Fragment,
   type ReactNode,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
 } from 'react';
@@ -36,6 +38,12 @@ import { mergeCardPatch } from '../utils/card-patch';
 import { isCardCanvasInteractivePointerTarget } from '../utils/card-popover-interactions';
 import './CardCanvas.css';
 import { CardCanvasItem } from './CardCanvasItem';
+import type { CardCanvasHandle } from './ExternalCardDrag';
+import { ExternalCardPreview } from './ExternalCardPreview';
+import {
+  CardCanvasMiniMap,
+  type CardCanvasMiniMapOptions,
+} from './CardCanvasMiniMap';
 import { CardCanvasToolbar } from './CardCanvasToolbar';
 import {
   type CardCanvasViewport,
@@ -45,6 +53,7 @@ import {
 import type { CardComment } from './CardComments';
 import { CardContentDialog } from './CardContentDialog';
 import { CardLinkConnectors } from './CardLinkConnectors';
+import { useExternalCardDragSessions } from './useExternalCardDragSessions';
 
 // 子卡布局模式：
 // - 'free'：自由放置，子卡片可在任意位置
@@ -178,6 +187,8 @@ export interface CardCanvasProps {
    * 传入配置对象时默认启用，可用 enabled: false 关闭。
    */
   virtualPaper?: boolean | CardCanvasVirtualPaperOptions;
+  /** MiniMap 配置。默认关闭，且仅在 virtual paper 启用时生效。 */
+  minimap?: false | CardCanvasMiniMapOptions;
 }
 
 /** 连线拖拽过程中的实时状态 */
@@ -224,6 +235,15 @@ const CHILDREN_LAYOUT_MODES: readonly CardChildrenLayoutMode[] = [
 ];
 
 const DEFAULT_VIEWPORT: CardCanvasViewport = { scale: 1, x: 0, y: 0 };
+const POPOVER_RESTORE_DEBOUNCE_MS = 160;
+function isVirtualPaperEnabled(
+  virtualPaper: boolean | CardCanvasVirtualPaperOptions | undefined
+): boolean {
+  if (virtualPaper === true) return true;
+  if (virtualPaper === false || virtualPaper === undefined) return false;
+  return virtualPaper.enabled !== false;
+}
+
 const DEFAULT_CARD_COLOR_OPTIONS: readonly CardCanvasColorOption[] = [
   { name: '蓝色', value: '#60a5fa' },
   { name: '紫色', value: '#a78bfa' },
@@ -232,7 +252,7 @@ const DEFAULT_CARD_COLOR_OPTIONS: readonly CardCanvasColorOption[] = [
   { name: '玫红', value: '#fb7185' },
 ];
 
-export function CardCanvas({
+export const CardCanvas = forwardRef<CardCanvasHandle, CardCanvasProps>(function CardCanvas({
   cards,
   onCardsChange,
   onAddCard,
@@ -254,15 +274,13 @@ export function CardCanvas({
   onLinkClick,
   editable = true,
   virtualPaper,
-}: CardCanvasProps) {
+  minimap,
+}: CardCanvasProps, ref) {
   const themeAccentStyle = getThemeAccentStyle(themeColor);
   const canAddCard = editable && onAddCard !== undefined;
   const canMutateLinks = editable && onCardsChange !== undefined;
   const [uncontrolledLinkMode, setUncontrolledLinkMode] = useState(false);
   const linkMode = linkModeProp ?? uncontrolledLinkMode;
-  const [parentCandidateId, setParentCandidateId] = useState<
-    string | undefined
-  >();
   // 当前正在被拖拽的卡片 id（仅有一张卡片在拖拽时才有值），用于隐藏 Popover
   const [movingCardId, setMovingCardId] = useState<string | undefined>();
   // 连线拖拽实时状态：拖拽期间存储源头卡片、指针位置、目标卡片
@@ -275,7 +293,18 @@ export function CardCanvas({
     ReadonlyMap<string, HTMLDivElement>
   >(new Map());
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const externalPlacementCardIdsRef = useRef(new Set<string>());
+  const virtualPaperEnabled = isVirtualPaperEnabled(virtualPaper);
+  const minimapOptions =
+    minimap === undefined || minimap === false ? undefined : minimap;
+  const minimapEnabled =
+    virtualPaperEnabled &&
+    minimapOptions !== undefined &&
+    minimapOptions.enabled !== false;
   const [popoverVisible, setPopoverVisible] = useState(true);
+  const popoverRestoreTimeoutRef = useRef<number | undefined>(undefined);
   const previousCardIdsRef = useRef<ReadonlySet<string>>(
     new Set(cards.map((card) => card.id))
   );
@@ -285,6 +314,13 @@ export function CardCanvas({
     const previousCardIds = previousCardIdsRef.current;
     const addedCard = cards.find((card) => !previousCardIds.has(card.id));
     previousCardIdsRef.current = new Set(cards.map((card) => card.id));
+    if (
+      addedCard !== undefined &&
+      externalPlacementCardIdsRef.current.delete(addedCard.id)
+    ) {
+      setNewCardId(undefined);
+      return;
+    }
     setNewCardId(addedCard?.id);
   }, [cards]);
 
@@ -339,12 +375,49 @@ export function CardCanvas({
   }, []);
   const getCards = useCallback(() => cardsRef.current, []);
 
+  const {
+    handle: externalCardDragHandle,
+    parentCandidateIds,
+    previews: externalPreviews,
+    setCardDragParentCandidate,
+  } = useExternalCardDragSessions({
+    cards,
+    editable,
+    onCardsChange,
+    onPlaced: (cardId) => externalPlacementCardIdsRef.current.add(cardId),
+    onSelect,
+    scale: viewport.scale,
+    wrapperRef,
+    containerRef,
+  });
+  useImperativeHandle(ref, () => externalCardDragHandle, [externalCardDragHandle]);
+
   useEffect(() => {
     if (popoverAnchors.size === 0) return;
 
     // 锚点 Popover 监听 scroll 重新计算位置；画布 transform 本身不会触发该浏览器事件。
     window.dispatchEvent(new CustomEvent('scroll', { detail: viewport }));
   }, [popoverAnchors.size, viewport]);
+
+  useEffect(
+    () => () => {
+      if (popoverRestoreTimeoutRef.current !== undefined) {
+        window.clearTimeout(popoverRestoreTimeoutRef.current);
+      }
+    },
+    []
+  );
+
+  const handleVirtualPaperInteraction = useCallback(() => {
+    setPopoverVisible(false);
+    if (popoverRestoreTimeoutRef.current !== undefined) {
+      window.clearTimeout(popoverRestoreTimeoutRef.current);
+    }
+    popoverRestoreTimeoutRef.current = window.setTimeout(() => {
+      popoverRestoreTimeoutRef.current = undefined;
+      setPopoverVisible(true);
+    }, POPOVER_RESTORE_DEBOUNCE_MS);
+  }, []);
 
   useEffect(() => {
     const normalizedCards = normalizeMindMapLayout(cards);
@@ -355,9 +428,23 @@ export function CardCanvas({
 
   // Ref to hold the latest onClearSelection to avoid stale closures in event listeners
   const onClearSelectionRef = useRef(onClearSelection);
+  const handledBlankPointerEventsRef = useRef(new WeakSet<PointerEvent>());
   useEffect(() => {
     onClearSelectionRef.current = onClearSelection;
   }, [onClearSelection]);
+
+  const clearSelectionAfterTitleCommit = useCallback(() => {
+    const activeElement = document.activeElement;
+    if (
+      activeElement instanceof HTMLElement &&
+      activeElement.matches('[data-card-title-edit]')
+    ) {
+      activeElement.blur();
+      requestAnimationFrame(() => onClearSelectionRef.current?.());
+      return;
+    }
+    onClearSelectionRef.current?.();
+  }, []);
 
   // Install a pointerdown listener on document to clear selection when clicking outside cards
   useEffect(() => {
@@ -365,9 +452,12 @@ export function CardCanvas({
     if (!onClearSelection || !selected || selected.length === 0) return;
 
     const handlePointerDown = (event: PointerEvent) => {
+      if (handledBlankPointerEventsRef.current.has(event)) {
+        return;
+      }
       // 如果点击在所有卡片、Popover 及其关联 portal 浮层之外，才清空选择。
       if (!isCardCanvasInteractivePointerTarget(event)) {
-        onClearSelectionRef.current?.();
+        clearSelectionAfterTitleCommit();
       }
     };
 
@@ -375,7 +465,7 @@ export function CardCanvas({
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [onClearSelection, selected]);
+  }, [clearSelectionAfterTitleCommit, onClearSelection, selected]);
 
   const handleSelectCard = useCallback(
     (cardId: string) => {
@@ -415,22 +505,34 @@ export function CardCanvas({
   return (
     <ThemeProvider accent={themeColor} mode={theme}>
       <div
+        ref={wrapperRef}
         className={`cards-card-canvas__wrapper ${className}`}
+        data-card-canvas
         data-theme={theme}
+        style={themeAccentStyle}
+        onPointerDownCapture={(event) => {
+          if (
+            event.target instanceof Element &&
+            event.target.closest('[data-card-virtual-paper="true"]') !== null &&
+            !isCardCanvasInteractivePointerTarget(event.nativeEvent)
+          ) {
+            handledBlankPointerEventsRef.current.add(event.nativeEvent);
+            clearSelectionAfterTitleCommit();
+          }
+        }}
       >
         <CardCanvasVirtualPaper
           virtualPaper={virtualPaper}
+          viewport={viewport}
           onViewportChange={setViewport}
-          onInteraction={() => {
-            setPopoverVisible(false);
-          }}
+          onInteraction={handleVirtualPaperInteraction}
           containerStyle={{
             width: '100%',
             height: '100%',
             overflow: 'visible',
           }}
         >
-          <div className="cards-card-canvas__container">
+          <div ref={containerRef} className="cards-card-canvas__container">
             <CardLinkConnectors
               cards={cards}
               getCards={getCards}
@@ -492,11 +594,16 @@ export function CardCanvas({
                     viewportScale={viewport.scale}
                     isSelected={selected?.includes(card.id) ?? false}
                     onSelect={handleSelectCard}
+                    onEditContent={
+                      editable
+                        ? (cardId) => setContentEditorCardId(cardId)
+                        : undefined
+                    }
                     options={normalizedOptions}
                     renderCardTitle={renderCardTitle}
                     renderCardContent={renderCardContent}
-                    isParentCandidate={parentCandidateId === card.id}
-                    setParentCandidateId={setParentCandidateId}
+                    isParentCandidate={parentCandidateIds.has(card.id)}
+                    setParentCandidateId={setCardDragParentCandidate}
                     linkMode={linkMode}
                     onLinkClick={onLinkClick}
                     editable={editable}
@@ -715,6 +822,16 @@ export function CardCanvas({
                 </Fragment>
               );
             })}
+            {Array.from(externalPreviews.entries()).map(([cardId, preview]) => (
+              <ExternalCardPreview
+                key={cardId}
+                card={preview.card}
+                position={preview.position}
+                renderCardTitle={renderCardTitle}
+                renderCardContent={renderCardContent}
+                theme={theme}
+              />
+            ))}
             {children}
             {/* 连线拖拽 overlay：圆圈指示器 + 虚线连线 */}
             {linkDragInfo !== null &&
@@ -775,6 +892,17 @@ export function CardCanvas({
               })()}
           </div>
         </CardCanvasVirtualPaper>
+        {minimapEnabled && minimapOptions !== undefined ? (
+          <CardCanvasMiniMap
+            cards={cards}
+            contentRef={containerRef}
+            hostRef={wrapperRef}
+            options={minimapOptions}
+            viewport={viewport}
+            onInteraction={handleVirtualPaperInteraction}
+            onViewportChange={setViewport}
+          />
+        ) : null}
         {editable && contentEditorCard === undefined ? (
           <CardCanvasToolbar
             addEnabled={canAddCard}
@@ -798,4 +926,4 @@ export function CardCanvas({
       </div>
     </ThemeProvider>
   );
-}
+});

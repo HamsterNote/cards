@@ -3,6 +3,7 @@
   height: 100%;
   overflow: visible;
   position: relative;
+  container-type: inline-size;
 
   /*
    * 主题变量：浅色（默认）
@@ -55,6 +56,10 @@
     transparent
   );
   --cards-link-drag-circle-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --cards-minimap-bg: rgba(255, 255, 255, 0.88);
+  --cards-minimap-border: rgba(15, 23, 42, 0.14);
+  --cards-minimap-card: #94a3b8;
+  --cards-minimap-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
 }
 
 /*
@@ -109,6 +114,10 @@
     transparent
   );
   --cards-link-drag-circle-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --cards-minimap-bg: rgba(31, 41, 55, 0.9);
+  --cards-minimap-border: rgba(255, 255, 255, 0.16);
+  --cards-minimap-card: #64748b;
+  --cards-minimap-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
 }
 
 .cards-card-canvas__container {
@@ -116,6 +125,74 @@
   height: 100%;
   overflow: visible;
   position: relative;
+}
+
+.cards-card-canvas__minimap {
+  appearance: none;
+  position: absolute;
+  z-index: 900;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid var(--cards-minimap-border);
+  border-radius: 8px;
+  background: var(--cards-minimap-bg);
+  box-shadow: var(--cards-minimap-shadow);
+  touch-action: none;
+  cursor: crosshair;
+  -webkit-user-select: none;
+  user-select: none;
+  backdrop-filter: blur(10px);
+}
+
+.cards-card-canvas__minimap--top-left {
+  top: 8px;
+  left: 8px;
+}
+
+.cards-card-canvas__minimap--top-right {
+  top: 8px;
+  right: 8px;
+}
+
+.cards-card-canvas__minimap--bottom-left {
+  bottom: 8px;
+  left: 8px;
+}
+
+.cards-card-canvas__minimap--bottom-right {
+  right: 8px;
+  bottom: 8px;
+}
+
+/* 窄画布中底部工具栏会占据中央区域，底部 MiniMap 上移以保持两者都可操作。 */
+@container (max-width: 520px) {
+  .cards-card-canvas__minimap--bottom-left,
+  .cards-card-canvas__minimap--bottom-right {
+    bottom: 64px;
+  }
+}
+
+.cards-card-canvas__minimap-card {
+  fill: var(--cards-minimap-card);
+  opacity: 0.78;
+}
+
+.cards-card-canvas__minimap-indicator {
+  fill: color-mix(in srgb, var(--hn-color-accent) 12%, transparent);
+  stroke: var(--hn-color-accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+}
+
+.cards-card-canvas__minimap-indicator:active {
+  cursor: grabbing;
+}
+
+.cards-card-canvas__minimap:focus-visible {
+  outline: 2px solid var(--hn-color-accent);
+  outline-offset: 2px;
 }
 
 .cards-card-canvas__connectors {
@@ -298,6 +375,17 @@
   box-shadow: var(--cards-card-parent-candidate-shadow);
 }
 
+.cards-card-canvas__card--external-preview,
+.cards-card-canvas__card--external-preview * {
+  pointer-events: none;
+}
+
+.cards-card-canvas__card--external-preview {
+  opacity: 0.62;
+  outline: 2px dashed var(--cards-card-selected-outline);
+  outline-offset: 2px;
+}
+
 /*
  * 连线拖拽样式
  * --- 源头卡片高亮 ---
@@ -403,7 +491,7 @@
   font-family: inherit;
   text-align: left;
   color: var(--cards-card-content-color);
-  cursor: grab;
+  cursor: default;
   -webkit-user-select: none;
   user-select: none;
   /* 允许长单词/URL 在卡片宽度边界处按单词边界换行，避免撑出卡片 */
@@ -516,7 +604,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  min-height: 44px;
+  min-height: 28px;
   min-width: 0;
   flex: 1;
 }
@@ -531,6 +619,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  height: 28px;
   min-width: 0;
 }
 
@@ -539,8 +628,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 28px;
   margin: 0;
   padding: 0;
   color: var(--cards-card-content-color);

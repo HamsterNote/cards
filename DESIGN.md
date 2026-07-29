@@ -28,8 +28,12 @@ The bottom control model follows `@hamster-note/painting`:
 - A themed card uses the selected color on its header. Its body mixes 12% of
   that color with white in light mode and 18% with black in dark mode.
 - Embedded note body spacing: `12px` on every edge.
+- Card footer link-row height: `28px`.
 - Layering: canvas controls render at `900`, below shared Popovers (`1000`) and
   Dialogs (`1100`), while remaining above cards and virtual-paper content.
+- MiniMap default size: `200px × 150px`; edge offset and internal padding: `8px`;
+  content bounds include `50px` breathing room; radius: `8px`; backdrop blur:
+  `10px`; card-preview opacity: `78%`.
 
 ## 4. Component Rules
 
@@ -39,15 +43,21 @@ The bottom control model follows `@hamster-note/painting`:
   A successful link gesture turns the mode off; invalid drops leave it enabled.
 - A newly created card appears in the visible viewport, is selected, and moves
   keyboard focus to its title editor.
+- Title input is mirrored to controlled card data while typing, so keeping a
+  newly created card never depends on pressing Enter. Escape restores the
+  value captured when that editing session received focus.
 - A newly created card that remains empty is discarded when selection leaves it.
 - Card titles remain directly editable when editing is enabled; card bodies are
   read-only on the canvas and become editable only in the selected card's
-  content Dialog.
+  content Dialog. Double-clicking a card body opens that same Dialog, and the
+  read-only body keeps the default cursor rather than suggesting a drag action.
 - A card may persist `headless: true` to hide its title bar. Enabling headless
   mode copies a non-empty title into a blank body once, without clearing title.
 - The selected-card Popover owns card color, headless mode, content editing,
   comments, and a child-layout submenu. Cards do not render a separate more
   button.
+- Selected-card outlines and focus rings use the canvas Theme Accent, never the
+  individual Card Theme Color.
 - Content Dialog changes are local drafts until Save is chosen; Cancel, Escape,
   and backdrop dismissal leave the card unchanged.
 - Canvas-level controls are hidden while the content Dialog is open so no
@@ -59,18 +69,22 @@ The bottom control model follows `@hamster-note/painting`:
   resize handles, links, and buttons remain independent controls.
 - Link mode uses the whole card surface as the link-drag handle while keeping
   link-navigation controls usable. The card itself remains stationary.
-- Each footer link is one row: navigation fills the available width and a
-  shared `delete` icon button sits at the far edge. Deletion requires the
+- Each footer link is a compact `28px` row: navigation fills the available width
+  and a shared `delete` icon button sits at the far edge. Deletion requires the
   shared danger confirmation and removes both sides of the relationship.
 - Dashed links have a forgiving pointer hit area and a keyboard-focusable
   midpoint. Selecting either opens an anchored Popover with an icon-and-label delete
   action that removes both sides after shared danger confirmation.
+- MiniMap is opt-in and only renders with virtual paper enabled. Background
+  clicks recenter the viewport, indicator drags pan continuously, and arrow keys
+  pan by `40px` (`80px` with Shift).
 
 ## 5. Motion
 
-Motion is functional only. Virtual-paper pan and zoom move cards and hide open
-card Popovers so detached overlays never remain on screen; no decorative
-animation is introduced.
+Motion is functional only. Virtual-paper pan and zoom temporarily hide open card
+Popovers while transforms update. Each movement resets a `160ms` debounce, and
+the Popover returns at its recalculated anchor only after movement has stopped;
+no detached overlay or decorative animation is introduced.
 
 ## 6. Responsive Behavior
 
@@ -78,6 +92,8 @@ The bottom action remains reachable at 375, 768, and 1280 px viewport widths.
 Action labels are visible at 768 px and above; below 768 px, responsive actions
 retain their icon and accessible name while hiding only the visual label. This
 must not change canvas dimensions or introduce horizontal overflow.
+- When the canvas itself is `520px` wide or narrower, a bottom-positioned
+  MiniMap sits `64px` above the edge to avoid the centered bottom toolbar.
 
 ## 7. Accessibility
 
@@ -89,10 +105,14 @@ must not change canvas dimensions or introduce horizontal overflow.
 - Programmatic title focus is visible and places the caret in the title editor.
 - The selected-card Popover exposes a named content-edit action, and the content
   editor uses a labelled modal Dialog with explicit Cancel and Save actions.
+- The compact footer delete action is `28px`; this deliberate dense-canvas target
+  is an accepted exception to the preferred `44px` touch target.
 - The selected-card Popover exposes the color palette as a named group; each
   swatch has a color name and reports its selected state with `aria-pressed`.
 - Locked state is represented with `aria-disabled` where an action remains
   visible, and destructive controls are disabled.
+- MiniMap is keyboard-focusable, has an explicit accessible name and visible
+  Theme Accent focus ring, and supports four-direction arrow-key navigation.
 
 ## 8. Accepted Debt
 

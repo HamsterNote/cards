@@ -8,6 +8,10 @@ export {
   type CardChildrenLayoutMode,
 } from './components/CardCanvas';
 export type {
+  CardCanvasMiniMapOptions,
+  CardCanvasMiniMapPosition,
+} from './components/CardCanvasMiniMap';
+export type {
   CardCanvasVirtualPaperInteraction,
   CardCanvasVirtualPaperOptions,
 } from './components/CardCanvasVirtualPaper';

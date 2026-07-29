@@ -88,6 +88,26 @@ test.describe('CardCanvas appearance and interaction boundaries', () => {
       'user-select',
       'none'
     );
+    await expect(card.locator('.cards-card-canvas__card-content')).toHaveCSS(
+      'cursor',
+      'default'
+    );
+  });
+
+  test('opens the content editor by double-clicking the card body', async ({
+    page,
+  }) => {
+    // Given: an editable card renders its body as read-only content.
+    await addCard(page, 'Double-click card', 'Open this body');
+    const content = page.locator(
+      '[data-card-id="card-1"] .cards-card-canvas__card-content'
+    );
+
+    // When: the user double-clicks the body.
+    await content.dblclick();
+
+    // Then: the same content Dialog used by the Popover edit action opens.
+    await expect(page.getByRole('dialog', { name: '编辑卡片内容' })).toBeVisible();
   });
 
   test('starts a link drag from inert card content while link mode is active', async ({
@@ -101,6 +121,7 @@ test.describe('CardCanvas appearance and interaction boundaries', () => {
     const content = card.locator('.cards-card-canvas__card-content');
 
     // When: the user drags from the body.
+    await content.scrollIntoViewIfNeeded();
     const contentBox = await getRequiredBox(content);
     await page.mouse.move(
       contentBox.x + contentBox.width / 2,
@@ -135,8 +156,10 @@ test.describe('CardCanvas appearance and interaction boundaries', () => {
       );
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = 'Host action';
+      button.setAttribute('aria-label', 'Host action');
       button.dataset.hostAction = '';
+      button.innerHTML =
+        '<svg viewBox="0 0 16 16" width="16" height="16"><path d="M2 8h12" stroke="currentColor" /></svg>';
       button.addEventListener('click', () => {
         button.dataset.clicked = 'true';
       });
@@ -145,12 +168,14 @@ test.describe('CardCanvas appearance and interaction boundaries', () => {
     const hostAction = card.locator('[data-host-action]');
     const before = getCardDataById(await getCardData(page), 'card-1');
 
-    // When: the host control is clicked and then receives a drag gesture.
+    // When: the host control SVG is double-clicked and then receives a drag gesture.
     await hostAction.click();
+    await hostAction.locator('path').dispatchEvent('dblclick');
     await dragLocatorBy(page, hostAction, { x: 70, y: 35 });
 
-    // Then: the control remains interactive and the card model does not move.
+    // Then: the control remains interactive without opening the card editor or moving the card.
     await expect(hostAction).toHaveAttribute('data-clicked', 'true');
+    await expect(page.getByRole('dialog', { name: '编辑卡片内容' })).toHaveCount(0);
     const after = getCardDataById(await getCardData(page), 'card-1');
     expect(after.x).toBeCloseTo(before.x, 5);
     expect(after.y).toBeCloseTo(before.y, 5);

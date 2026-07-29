@@ -6,7 +6,7 @@ import {
   VirtualPaperRenderMode,
   type VirtualPaperTransform,
 } from '@hamster-note/virtual-paper';
-import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect } from 'react';
 
 export type CardCanvasVirtualPaperInteraction =
   | 'mouseWheelZoom'
@@ -53,17 +53,22 @@ export type CardCanvasViewport = {
   readonly y: number;
 };
 
-const DEFAULT_VIEWPORT: CardCanvasViewport = { scale: 1, x: 0, y: 0 };
+const DEFAULT_CARD_CANVAS_VIEWPORT: CardCanvasViewport = {
+  scale: 1,
+  x: 0,
+  y: 0,
+};
 
 export type CardCanvasVirtualPaperProps = {
   readonly virtualPaper?: boolean | CardCanvasVirtualPaperOptions | undefined;
+  readonly viewport: CardCanvasViewport;
   readonly onViewportChange: (viewport: CardCanvasViewport) => void;
   readonly onInteraction: () => void;
   readonly containerStyle: CSSProperties;
   readonly children: ReactNode;
 };
 
-function isEnabled(
+function isCardCanvasVirtualPaperEnabled(
   virtualPaper: boolean | CardCanvasVirtualPaperOptions | undefined
 ): boolean {
   if (virtualPaper === true) return true;
@@ -110,17 +115,17 @@ function toInitialPlacementProp(
 
 export function CardCanvasVirtualPaper({
   virtualPaper,
+  viewport,
   onViewportChange,
   onInteraction,
   containerStyle,
   children,
 }: CardCanvasVirtualPaperProps) {
-  const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
-  const enabled = isEnabled(virtualPaper);
+  const enabled = isCardCanvasVirtualPaperEnabled(virtualPaper);
 
   useEffect(() => {
-    onViewportChange(enabled ? viewport : DEFAULT_VIEWPORT);
-  }, [enabled, onViewportChange, viewport]);
+    if (!enabled) onViewportChange(DEFAULT_CARD_CANVAS_VIEWPORT);
+  }, [enabled, onViewportChange]);
 
   if (!enabled) {
     return children;
@@ -131,7 +136,7 @@ export function CardCanvasVirtualPaper({
     <VirtualPaper
       {...toVirtualPaperProps(options, viewport, (nextViewport) => {
         onInteraction();
-        setViewport(nextViewport);
+        onViewportChange(nextViewport);
       })}
       containerStyle={containerStyle}
       wrapperProps={{

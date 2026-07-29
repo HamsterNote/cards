@@ -1837,6 +1837,28 @@ test.describe('CardCanvas direct editing', () => {
     );
   });
 
+  test('restores the title model when direct editing is cancelled with Escape', async ({
+    page,
+  }) => {
+    // Given: the focused title has a live edit already mirrored to controlled data.
+    const title = page.locator(
+      '[data-card-id="card-1"] [data-card-title-edit]'
+    );
+    await title.fill('Cancelled title');
+    expect(getCardDataById(await getCardData(page), 'card-1').title).toBe(
+      'Cancelled title'
+    );
+
+    // When: the user cancels this editing session with Escape.
+    await page.keyboard.press('Escape');
+
+    // Then: both the rendered title and controlled data return to the focus-time value.
+    await expect(title).toHaveText('Original title');
+    expect(getCardDataById(await getCardData(page), 'card-1').title).toBe(
+      'Original title'
+    );
+  });
+
   test('does not move a card while dragging across its editable title', async ({
     page,
   }) => {

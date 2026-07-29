@@ -282,8 +282,15 @@ test.describe('CardCanvas popover interactions', () => {
     page,
   }) => {
     // Given: the Demo starts with the violet preset.
+    await addCard(page, 'Accent card', 'Selected outline');
     const toolbar = page.locator('[data-card-canvas-toolbar]');
+    const selectedCard = page.locator(
+      '[data-card-id="card-1"].cards-card-canvas__card--selected'
+    );
     await expect(toolbar).toHaveCSS('--hn-color-accent', '#7c83ff');
+    const initialOutlineColor = await selectedCard.evaluate(
+      (element) => getComputedStyle(element).outlineColor
+    );
 
     // When: the blue preset is chosen.
     await page.locator('[data-card-theme-accent-option="blue"]').click();
@@ -296,6 +303,13 @@ test.describe('CardCanvas popover interactions', () => {
 
     // Then: the custom accent reaches the canvas boundary.
     await expect(toolbar).toHaveCSS('--hn-color-accent', '#123abc');
+    await expect
+      .poll(() =>
+        selectedCard.evaluate(
+          (element) => getComputedStyle(element).outlineColor
+        )
+      )
+      .not.toBe(initialOutlineColor);
   });
 
   test('mounts the selected card popover in document body', async ({
@@ -315,7 +329,7 @@ test.describe('CardCanvas popover interactions', () => {
     expect(isMountedInBody).toBe(true);
   });
 
-  test('hides the selected-card popover when virtual paper scrolls', async ({
+  test('repositions the selected-card popover when virtual paper scrolls', async ({
     page,
   }) => {
     // Given: virtual paper contains a selected card with an open Popover.
@@ -323,22 +337,32 @@ test.describe('CardCanvas popover interactions', () => {
     await addCard(page, 'Card A', 'Content A');
     const popover = page.locator('.cards-card-canvas__popover');
     await expect(popover).toBeVisible();
+    const initialPopoverBox = await getRequiredBox(popover);
     const stageBox = await getRequiredBox(
       page.locator('.card-canvas-demo-stage')
     );
     await page.mouse.move(stageBox.x + 30, stageBox.y + 30);
 
-    // When: the user scrolls to pan the virtual paper.
+    // When: the user continuously scrolls to pan the virtual paper.
     await page.mouse.wheel(0, 80);
-
-    // Then: the Popover hides without clearing the selected card.
     await expect(popover).toHaveCount(0);
+    await page.waitForTimeout(80);
+    await expect(popover).toHaveCount(0);
+    await page.mouse.wheel(0, 80);
+    await page.waitForTimeout(80);
+
+    // Then: the Popover stays hidden between movements, then returns at the transformed card position.
+    await expect(popover).toHaveCount(0);
+    await expect(popover).toBeVisible();
+    await expect
+      .poll(async () => (await getRequiredBox(popover)).y)
+      .not.toBeCloseTo(initialPopoverBox.y, 1);
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       'card-1'
     );
   });
 
-  test('hides the selected-card popover when virtual paper zooms', async ({
+  test('repositions the selected-card popover when virtual paper zooms', async ({
     page,
   }) => {
     // Given: virtual paper contains a selected card with an open Popover.
@@ -346,6 +370,7 @@ test.describe('CardCanvas popover interactions', () => {
     await addCard(page, 'Card A', 'Content A');
     const popover = page.locator('.cards-card-canvas__popover');
     await expect(popover).toBeVisible();
+    const initialPopoverBox = await getRequiredBox(popover);
     const stageBox = await getRequiredBox(
       page.locator('.card-canvas-demo-stage')
     );
@@ -356,8 +381,11 @@ test.describe('CardCanvas popover interactions', () => {
     await page.mouse.wheel(0, -80);
     await page.keyboard.up('Control');
 
-    // Then: the Popover hides without clearing the selected card.
-    await expect(popover).toHaveCount(0);
+    // Then: the Popover returns at the transformed card position without clearing selection.
+    await expect(popover).toBeVisible();
+    await expect
+      .poll(async () => (await getRequiredBox(popover)).x)
+      .not.toBeCloseTo(initialPopoverBox.x, 1);
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       'card-1'
     );

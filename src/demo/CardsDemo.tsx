@@ -83,6 +83,7 @@ export function Demo() {
   const [commentingCardId, setCommentingCardId] = useState<string>();
   const [editable, setEditable] = useState(true);
   const [virtualPaper, setVirtualPaper] = useState(false);
+  const [minimap, setMinimap] = useState(false);
   const [theme, setTheme] = useState<CardsTheme>('light');
   const [themeColor, setThemeColor] = useState<ThemeAccent>('violet');
   const [customThemeColor, setCustomThemeColor] = useState('');
@@ -354,9 +355,27 @@ export function Demo() {
                   type="checkbox"
                   data-card-virtual-paper-toggle
                   checked={virtualPaper}
-                  onChange={(event) => setVirtualPaper(event.target.checked)}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setVirtualPaper(enabled);
+                    if (!enabled) {
+                      setMinimap(false);
+                    }
+                  }}
                 />
                 Enable virtual paper
+              </label>
+            </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-minimap-toggle
+                  checked={minimap}
+                  disabled={!virtualPaper}
+                  onChange={(event) => setMinimap(event.target.checked)}
+                />
+                Enable MiniMap
               </label>
             </div>
             <div className="demo__form-group demo__form-group--checkbox">
@@ -507,6 +526,7 @@ export function Demo() {
                 onLinkModeChange={setLinkMode}
                 editable={editable}
                 virtualPaper={virtualPaper}
+                minimap={minimap ? {} : false}
                 theme={theme}
                 themeColor={themeColor}
                 {...(linkCallbackEnabled

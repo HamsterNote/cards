@@ -14,8 +14,8 @@ import {
   type MutableRefObject,
   type ClipboardEvent as ReactClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
   useRef,
@@ -79,6 +79,8 @@ export interface CardCanvasItemProps {
   readonly viewportScale: number;
   readonly isSelected: boolean;
   readonly onSelect?: ((id: string) => void) | undefined;
+  /** 双击只读正文时，交由画布打开统一的正文编辑 Dialog。 */
+  readonly onEditContent?: ((id: string) => void) | undefined;
   readonly options: Required<CardCanvasOptions>;
   readonly renderCardTitle?: ((title: string) => ReactNode) | undefined;
   readonly renderCardContent?: ((content: string) => ReactNode) | undefined;
@@ -137,6 +139,7 @@ export function CardCanvasItem({
   viewportScale,
   isSelected,
   onSelect,
+  onEditContent,
   options,
   renderCardTitle,
   renderCardContent,
@@ -740,7 +743,7 @@ export function CardCanvasItem({
     ) => {
       const handlePointerDown = (e: PointerEvent) => {
         if (
-          e.target instanceof HTMLElement &&
+          e.target instanceof Element &&
           e.target.closest(CARD_INTERACTIVE_CONTROL_SELECTOR)
         ) {
           pointerDownRef.current = null;
@@ -759,7 +762,7 @@ export function CardCanvasItem({
 
       const handleClick = (e: MouseEvent) => {
         if (
-          e.target instanceof HTMLElement &&
+          e.target instanceof Element &&
           e.target.closest(CARD_INTERACTIVE_CONTROL_SELECTOR)
         ) {
           pointerDownRef.current = null;
@@ -801,6 +804,24 @@ export function CardCanvasItem({
       headerCleanup?.();
     };
   }, [card.headless, card.id, onSelect]);
+
+  useEffect(() => {
+    const contentEl = contentRef.current;
+    if (contentEl === null || onEditContent === undefined) return;
+
+    const handleDoubleClick = (event: MouseEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(CARD_INTERACTIVE_CONTROL_SELECTOR)
+      ) {
+        return;
+      }
+      onEditContent(card.id);
+    };
+
+    contentEl.addEventListener('dblclick', handleDoubleClick);
+    return () => contentEl.removeEventListener('dblclick', handleDoubleClick);
+  }, [card.id, onEditContent]);
 
   const linkedCards = resolveLinkedCards(cards, card.id);
 
@@ -878,6 +899,15 @@ export function CardCanvasItem({
   };
 
   const titleEditRef = useRef<HTMLSpanElement>(null);
+  const titleBeforeEditRef = useRef(card.title);
+  const isCancellingTitleEditRef = useRef(false);
+
+  useEffect(() => {
+    const el = titleEditRef.current;
+    if (el && document.activeElement !== el && el.textContent !== card.title) {
+      el.textContent = card.title;
+    }
+  }, [card.title]);
 
   useEffect(() => {
     const titleEdit = titleEditRef.current;
@@ -895,6 +925,10 @@ export function CardCanvasItem({
   }, [editable, focusTitle]);
 
   const commitTitleEdit = () => {
+    if (isCancellingTitleEditRef.current) {
+      isCancellingTitleEditRef.current = false;
+      return;
+    }
     const el = titleEditRef.current;
     if (!el) return;
     const nextTitle = el.textContent ?? '';
@@ -912,7 +946,9 @@ export function CardCanvasItem({
       return;
     }
     if (event.key === 'Escape') {
-      event.currentTarget.textContent = card.title;
+      event.currentTarget.textContent = titleBeforeEditRef.current;
+      onPatchCard({ title: titleBeforeEditRef.current });
+      isCancellingTitleEditRef.current = true;
       event.currentTarget.blur();
     }
   };
@@ -928,14 +964,6 @@ export function CardCanvasItem({
       event.clipboardData.getData('text/plain')
     );
   };
-
-  // 外部 title 变更（程序化更新/父级重算）在非聚焦时同步进 contentEditable
-  useEffect(() => {
-    const el = titleEditRef.current;
-    if (el && document.activeElement !== el && el.textContent !== card.title) {
-      el.textContent = card.title;
-    }
-  }, [card.title]);
 
   const showNoteContent =
     card.content !== '' || (card.contentBlocks?.length ?? 0) > 0;
@@ -1010,14 +1038,16 @@ export function CardCanvasItem({
               tabIndex={0}
               suppressContentEditableWarning
               spellCheck={false}
+              onFocus={() => {
+                titleBeforeEditRef.current = card.title;
+              }}
+              onInput={commitTitleEdit}
               onBlur={commitTitleEdit}
               onKeyDown={handleTitleEditKeyDown}
               onPaste={handleTitleEditPaste}
               onPointerEnter={suspendCardDrag}
               onPointerLeave={resumeCardDrag}
-            >
-              {card.title}
-            </span>
+            />
           ) : (
             card.title
           )}

@@ -238,6 +238,7 @@ test.describe('CardCanvas link mode', () => {
     await expect(betaToAlpha.locator('svg')).toHaveCount(1);
     await expect(alphaToBeta).toHaveCSS('color', 'rgb(37, 99, 235)');
     await expect(alphaToBeta).toHaveCSS('cursor', 'pointer');
+    await expect(alphaToBeta.locator('..')).toHaveCSS('height', '28px');
     const textDecoration = await alphaToBeta.evaluate(
       (element) => window.getComputedStyle(element).textDecorationLine
     );
