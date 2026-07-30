@@ -6,16 +6,18 @@ import {
   THEME_ACCENTS,
   type ThemeAccent,
 } from '@hamster-note/components';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Button,
   CardCanvas,
   type CardCanvasCard,
+  type CardCanvasHandle,
   CardComments,
   type CardsTheme,
   deleteCards,
 } from '../index';
 import { normalizeMindMapLayout } from '../utils/card-layout';
+import { ExternalCardDragSource } from './ExternalCardDragSource';
 
 type LastLinkResult = {
   readonly sourceId: string;
@@ -91,6 +93,7 @@ export function Demo() {
   const [lastLinkResult, setLastLinkResult] = useState<LastLinkResult | null>(
     null
   );
+  const canvasRef = useRef<CardCanvasHandle>(null);
 
   useEffect(() => {
     const handleSetCards = (event: Event) => {
@@ -510,10 +513,12 @@ export function Demo() {
                 )}
               </div>
             </div>
+            <ExternalCardDragSource canvasRef={canvasRef} />
           </div>
           <div className="card-canvas-demo-stage">
             <div className="card-canvas-demo-stage-wrapper">
               <CardCanvas
+                ref={canvasRef}
                 cards={cards}
                 onCardsChange={setCards}
                 onAddCard={handleAddDraftCard}

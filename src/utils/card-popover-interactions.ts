@@ -25,6 +25,14 @@ const CARD_CANVAS_PORTALED_OVERLAY_ROLE_SELECTOR = [
   .map((role) => `[role="${role}"]`)
   .join(', ');
 
+export const CARD_CANVAS_COORDINATE_OVERLAY_SELECTOR = [
+  `[${CARD_CANVAS_POPOVER_OVERLAY_ATTRIBUTE}]`,
+  '[data-card-canvas-toolbar]',
+  '.cards-card-canvas__minimap',
+  '.cards-card-canvas__popover',
+  CARD_CANVAS_PORTALED_OVERLAY_ROLE_SELECTOR,
+].join(', ');
+
 function splitIdList(value: string | null): readonly string[] {
   return value?.split(/\s+/).filter(Boolean) ?? [];
 }

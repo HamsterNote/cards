@@ -1,4 +1,8 @@
-import type { Drag, Finger } from '@system-ui-js/multi-drag';
+import {
+  FingerOperationType,
+  type Drag,
+  type Finger,
+} from '@system-ui-js/multi-drag';
 import type { CardCanvasCard } from './CardCanvas';
 
 export interface CardCanvasHandle {
@@ -63,6 +67,7 @@ export interface ExternalCardDragStartupContext {
 export interface ExternalCardDragStartPreparation {
   readonly anchor: ExternalCardDragAnchor;
   readonly card: CardCanvasCard;
+  readonly drag: Drag;
   readonly finger: Finger;
 }
 
@@ -88,38 +93,50 @@ function isFinitePositiveNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
-function isValidExternalCardAnchor(
-  anchor: ExternalCardDragAnchor | undefined
-): anchor is ExternalCardDragAnchor {
-  if (anchor === undefined) return true;
+function captureExternalCardAnchor(
+  input: ExternalCardDragInput
+): ExternalCardDragAnchor | undefined {
+  try {
+    const anchor = input.anchor;
+    if (anchor === undefined) return DEFAULT_EXTERNAL_CARD_DRAG_ANCHOR;
 
-  const candidate: unknown = anchor;
-  if (!isRecord(candidate)) return false;
+    const candidate: unknown = anchor;
+    if (!isRecord(candidate)) return undefined;
 
-  const x = candidate.x;
-  const y = candidate.y;
-  return (
-    typeof x === 'number' &&
-    Number.isFinite(x) &&
-    x >= 0 &&
-    x <= 1 &&
-    typeof y === 'number' &&
-    Number.isFinite(y) &&
-    y >= 0 &&
-    y <= 1
-  );
+    const x = candidate.x;
+    const y = candidate.y;
+    if (
+      typeof x === 'number' &&
+      Number.isFinite(x) &&
+      x >= 0 &&
+      x <= 1 &&
+      typeof y === 'number' &&
+      Number.isFinite(y) &&
+      y >= 0 &&
+      y <= 1
+    ) {
+      return { x, y };
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-function isValidExternalCard(card: CardCanvasCard): boolean {
-  const candidate: unknown = card;
-  if (!isRecord(candidate)) return false;
+function isValidExternalCard(card: unknown): card is CardCanvasCard {
+  try {
+    const candidate: unknown = card;
+    if (!isRecord(candidate)) return false;
 
-  return (
-    typeof candidate.id === 'string' &&
-    candidate.id.length > 0 &&
-    isFinitePositiveNumber(candidate.width) &&
-    isFinitePositiveNumber(candidate.height)
-  );
+    return (
+      typeof candidate.id === 'string' &&
+      candidate.id.length > 0 &&
+      isFinitePositiveNumber(candidate.width) &&
+      isFinitePositiveNumber(candidate.height)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function snapshotExternalCard(
@@ -135,7 +152,13 @@ function snapshotExternalCard(
 export function selectFirstActiveExternalDragFinger(
   drag: Drag
 ): Finger | undefined {
-  return drag.getFingers().find((finger) => !finger.getIsDestroyed());
+  return drag
+    .getFingers()
+    .find(
+      (finger) =>
+        !finger.getIsDestroyed() &&
+        finger.getLastOperation(FingerOperationType.End) === undefined
+    );
 }
 
 export function prepareExternalCardDragStart(
@@ -150,18 +173,27 @@ export function prepareExternalCardDragStart(
     return { ok: false, reason: 'missing-on-cards-change' };
   }
 
-  if (!isValidExternalCardAnchor(input.anchor)) {
+  const anchor = captureExternalCardAnchor(input);
+  if (anchor === undefined) {
     return { ok: false, reason: 'invalid-anchor' };
   }
 
-  if (!isValidExternalCard(input.card)) {
+  let callerCard: CardCanvasCard;
+  try {
+    callerCard = input.card;
+  } catch {
     return { ok: false, reason: 'invalid-card' };
   }
 
-  const card = snapshotExternalCard(input.card);
-  if (card === undefined) {
+  if (!isValidExternalCard(callerCard)) {
     return { ok: false, reason: 'invalid-card' };
   }
+
+  const snapshot = snapshotExternalCard(callerCard);
+  if (snapshot === undefined || !isValidExternalCard(snapshot)) {
+    return { ok: false, reason: 'invalid-card' };
+  }
+  const card = snapshot;
 
   if (
     context.cards.some((existingCard) => existingCard.id === card.id) ||
@@ -170,11 +202,23 @@ export function prepareExternalCardDragStart(
     return { ok: false, reason: 'duplicate-card-id' };
   }
 
-  if (context.activeDrags.has(input.drag)) {
+  let drag: Drag;
+  try {
+    drag = input.drag;
+  } catch {
+    return { ok: false, reason: 'missing-active-pointer' };
+  }
+
+  if (context.activeDrags.has(drag)) {
     return { ok: false, reason: 'drag-already-active' };
   }
 
-  const finger = selectFirstActiveExternalDragFinger(input.drag);
+  let finger: Finger | undefined;
+  try {
+    finger = selectFirstActiveExternalDragFinger(drag);
+  } catch {
+    return { ok: false, reason: 'missing-active-pointer' };
+  }
   if (finger === undefined) {
     return { ok: false, reason: 'missing-active-pointer' };
   }
@@ -182,8 +226,9 @@ export function prepareExternalCardDragStart(
   return {
     ok: true,
     preparation: {
-      anchor: input.anchor ?? DEFAULT_EXTERNAL_CARD_DRAG_ANCHOR,
+      anchor,
       card,
+      drag,
       finger,
     },
   };

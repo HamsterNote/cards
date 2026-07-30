@@ -5,7 +5,6 @@ import '@hamster-note/notes/styles.css';
 import {
   Drag,
   DragOperationType,
-  defaultSetPose,
   type Finger,
   FingerOperationType,
   type Pose,
@@ -285,7 +284,8 @@ export function CardCanvasItem({
 
     const drag = new Drag(cardEl, {
       getPose,
-      setPose: (_element, pose) => defaultSetPose(cardEl, pose),
+      // 卡片位置由 React 以画布坐标提交；禁止 multi-drag 再用屏幕坐标直接写入 left/top。
+      setPose: () => {},
     });
     dragRef.current = drag;
     if (!canMoveOrResizeRef.current) {

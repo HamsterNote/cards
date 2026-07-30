@@ -14,9 +14,7 @@
 import type { Drag } from '@system-ui-js/multi-drag';
 
 export interface CardCanvasHandle {
-  startExternalDrag(
-    input: ExternalCardDragInput
-  ): ExternalCardDragStartResult;
+  startExternalDrag(input: ExternalCardDragInput): ExternalCardDragStartResult;
 }
 
 export interface ExternalCardDragInput {
@@ -157,6 +155,7 @@ const y = pointerCanvasY - card.height * anchor.y;
 - 不创建 `Drag`，不响应选择、编辑、链接或 resize；
 - 不显示 Popover、菜单、评论入口、编辑器和缩放手柄；
 - 自定义渲染器产生的按钮、链接或输入也不可交互；
+- 若不透明自定义渲染器在内部创建 Portal，预览会仅隔离归属于该预览 React 子树的 Portal：其会立即 `hidden`、`inert`、`aria-hidden`，并阻断指针和键盘激活；普通渲染输出保留。Portal 节点由 React 在预览结算或取消时正常卸载，不影响无关宿主 Portal；
 - 自定义渲染器抛错时沿用宿主现有 React Error Boundary，不在外部拖入层吞错。
 
 ## 8. Demo 设计

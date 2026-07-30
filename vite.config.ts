@@ -30,6 +30,7 @@ export default defineConfig({
         '@hamster-note/components',
         '@hamster-note/notes',
         '@hamster-note/virtual-paper',
+        '@system-ui-js/multi-drag',
       ],
       output: {
         globals: {

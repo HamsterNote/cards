@@ -1,8 +1,15 @@
 import { NoteContent } from '@hamster-note/notes';
-import type { CSSProperties, ReactNode } from 'react';
+import {
+  Children,
+  type CSSProperties,
+  cloneElement,
+  isValidElement,
+  type ReactNode,
+} from 'react';
 import type { CardsTheme } from '../theme';
 import { resolveCardContentBlocks } from '../utils/card-content-blocks';
 import type { CardCanvasCard } from './CardCanvas';
+import { ExternalCardPreviewPortalBoundary } from './ExternalCardPreviewPortalBoundary';
 
 export type ExternalCardPreviewProps = {
   readonly card: CardCanvasCard;
@@ -36,6 +43,31 @@ function getReadableThemeColor(themeColor: string): '#000' | '#fff' {
     (channels[2] ?? 0) * 0.0722;
 
   return luminance > 0.179 ? '#000' : '#fff';
+}
+
+function isReactPortal(node: ReactNode): boolean {
+  return (
+    typeof node === 'object' &&
+    node !== null &&
+    '$$typeof' in node &&
+    node.$$typeof === Symbol.for('react.portal')
+  );
+}
+
+function renderPreviewRendererOutput(node: ReactNode): ReactNode {
+  if (isReactPortal(node)) return null;
+  if (!isValidElement<{ readonly children?: ReactNode }>(node)) {
+    return node;
+  }
+  return cloneElement(
+    node,
+    undefined,
+    Children.map(node.props.children, renderPreviewRendererOutput)
+  );
+}
+
+function renderPreviewRendererChildren(node: ReactNode): ReactNode {
+  return Children.map(node, renderPreviewRendererOutput);
 }
 
 export function ExternalCardPreview({
@@ -77,6 +109,15 @@ export function ExternalCardPreview({
       className="cards-card-canvas__card cards-card-canvas__card--external-preview"
       data-external-card-preview
       data-card-headless={card.headless ? 'true' : undefined}
+      inert
+      onClickCapture={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onKeyDownCapture={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
@@ -87,12 +128,20 @@ export function ExternalCardPreview({
     >
       {card.headless === true ? null : (
         <div className="cards-card-canvas__card-header" style={titleStyle}>
-          {renderCardTitle ? renderCardTitle(card.title) : card.title}
+          {renderCardTitle ? (
+            <ExternalCardPreviewPortalBoundary>
+              {renderPreviewRendererChildren(renderCardTitle(card.title))}
+            </ExternalCardPreviewPortalBoundary>
+          ) : (
+            card.title
+          )}
         </div>
       )}
       <div className="cards-card-canvas__card-content" style={contentStyle}>
         {renderCardContent ? (
-          renderCardContent(card.content)
+          <ExternalCardPreviewPortalBoundary>
+            {renderPreviewRendererChildren(renderCardContent(card.content))}
+          </ExternalCardPreviewPortalBoundary>
         ) : card.content !== '' || (card.contentBlocks?.length ?? 0) > 0 ? (
           <div className="cards-card-canvas__card-note cards-card-canvas__embedded-note">
             <NoteContent

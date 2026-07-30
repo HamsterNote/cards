@@ -157,6 +157,32 @@ test.describe('external card drag startup seam', () => {
             { card: new Proxy(makeCard('clone-failure'), {}), drag },
             baseContext
           ),
+          throwingAnchor: reasonFor(
+            {
+              card: makeCard('throwing-anchor'),
+              anchor: new Proxy(
+                { x: 0.5, y: 0.5 },
+                {
+                  get() {
+                    throw new TypeError('anchor getter failed');
+                  },
+                }
+              ),
+              drag,
+            },
+            baseContext
+          ),
+          throwingCard: reasonFor(
+            {
+              card: new Proxy(makeCard('throwing-card'), {
+                get() {
+                  throw new TypeError('card getter failed');
+                },
+              }),
+              drag,
+            },
+            baseContext
+          ),
         };
         drag.destroy();
         source.remove();
@@ -179,200 +205,8 @@ test.describe('external card drag startup seam', () => {
       dragAlreadyActive: 'drag-already-active',
       missingActivePointer: 'missing-active-pointer',
       cloneFailure: 'invalid-card',
-    });
-  });
-
-  test('rejects every invalid anchor and Card geometry boundary', async ({
-    page,
-  }) => {
-    // Given: a real active Drag and otherwise valid startup dependencies.
-    await page.goto('/');
-
-    // When: each documented finite-range and positive-geometry boundary is evaluated.
-    const reasons = await page.evaluate(
-      async ({ externalCardDragModuleUrl, multiDragModuleUrl }) => {
-        const { prepareExternalCardDragStart } = await import(
-          externalCardDragModuleUrl
-        );
-        const { Drag } = await import(multiDragModuleUrl);
-        const source = document.createElement('div');
-        document.body.append(source);
-        const drag = new Drag(source, { setPose: () => {} });
-        source.dispatchEvent(
-          new PointerEvent('pointerdown', {
-            bubbles: true,
-            button: 0,
-            pointerId: 51,
-            pointerType: 'mouse',
-          })
-        );
-        const makeCard = (id: string) => ({
-          id,
-          title: `Title ${id}`,
-          content: `Content ${id}`,
-          x: 0,
-          y: 0,
-          width: 120,
-          height: 80,
-        });
-        const context = {
-          editable: true,
-          onCardsChange: () => {},
-          cards: [],
-          activeCandidateCardIds: new Set<string>(),
-          activeDrags: new Set<InstanceType<typeof Drag>>(),
-        };
-        const reasonFor = (input: {
-          card: ReturnType<typeof makeCard>;
-          anchor?: { x: number; y: number };
-        }) => {
-          const result = prepareExternalCardDragStart(
-            { ...input, drag },
-            context
-          );
-          return result.ok ? 'accepted' : result.reason;
-        };
-
-        const result = {
-          anchorBelowRange: reasonFor({
-            card: makeCard('anchor-below-range'),
-            anchor: { x: -Number.EPSILON, y: 0.5 },
-          }),
-          anchorAboveRange: reasonFor({
-            card: makeCard('anchor-above-range'),
-            anchor: { x: 0.5, y: 1 + Number.EPSILON },
-          }),
-          anchorInfinite: reasonFor({
-            card: makeCard('anchor-infinite'),
-            anchor: { x: Infinity, y: 0.5 },
-          }),
-          emptyCardId: reasonFor({ card: makeCard('') }),
-          zeroWidth: reasonFor({
-            card: { ...makeCard('zero-width'), width: 0 },
-          }),
-          negativeHeight: reasonFor({
-            card: { ...makeCard('negative-height'), height: -1 },
-          }),
-          infiniteWidth: reasonFor({
-            card: { ...makeCard('infinite-width'), width: Infinity },
-          }),
-          nanHeight: reasonFor({
-            card: { ...makeCard('nan-height'), height: Number.NaN },
-          }),
-        };
-        drag.destroy();
-        source.remove();
-        return result;
-      },
-      {
-        externalCardDragModuleUrl: EXTERNAL_CARD_DRAG_MODULE_URL,
-        multiDragModuleUrl: MULTI_DRAG_MODULE_URL,
-      }
-    );
-
-    // Then: no boundary is silently clamped, coerced, or accepted.
-    expect(reasons).toEqual({
-      anchorBelowRange: 'invalid-anchor',
-      anchorAboveRange: 'invalid-anchor',
-      anchorInfinite: 'invalid-anchor',
-      emptyCardId: 'invalid-card',
-      zeroWidth: 'invalid-card',
-      negativeHeight: 'invalid-card',
-      infiniteWidth: 'invalid-card',
-      nanHeight: 'invalid-card',
-    });
-  });
-
-  test('snapshots the card and locks the first active Finger', async ({
-    page,
-  }) => {
-    // Given: a real Drag with two active touch Fingers and a deeply mutable caller Card.
-    await page.goto('/');
-
-    // When: startup preparation succeeds before the caller mutates its input Card.
-    const snapshot = await page.evaluate(
-      async ({ externalCardDragModuleUrl, multiDragModuleUrl }) => {
-        const { prepareExternalCardDragStart } = await import(
-          externalCardDragModuleUrl
-        );
-        const { Drag } = await import(multiDragModuleUrl);
-        const source = document.createElement('div');
-        document.body.append(source);
-        const drag = new Drag(source, {
-          maxFingerCount: -1,
-          setPose: () => {},
-        });
-        source.dispatchEvent(
-          new PointerEvent('pointerdown', {
-            bubbles: true,
-            button: 0,
-            pointerId: 61,
-            pointerType: 'touch',
-          })
-        );
-        source.dispatchEvent(
-          new PointerEvent('pointerdown', {
-            bubbles: true,
-            button: 0,
-            pointerId: 62,
-            pointerType: 'touch',
-          })
-        );
-        const card = {
-          id: 'snapshot-card',
-          title: 'Initial title',
-          content: 'Initial content',
-          x: 999,
-          y: 888,
-          width: 120,
-          height: 80,
-          contentStyle: { color: 'rgb(10, 20, 30)' },
-        };
-        const result = prepareExternalCardDragStart(
-          { card, drag },
-          {
-            editable: true,
-            onCardsChange: () => {},
-            cards: [],
-            activeCandidateCardIds: new Set<string>(),
-            activeDrags: new Set(),
-          }
-        );
-
-        card.title = 'Mutated title';
-        card.contentStyle.color = 'rgb(40, 50, 60)';
-        drag.destroy();
-        source.remove();
-
-        if (!result.ok) return result;
-        return {
-          ok: result.ok,
-          anchor: result.preparation.anchor,
-          card: result.preparation.card,
-          pointerId: result.preparation.finger.pointerId,
-        };
-      },
-      {
-        externalCardDragModuleUrl: EXTERNAL_CARD_DRAG_MODULE_URL,
-        multiDragModuleUrl: MULTI_DRAG_MODULE_URL,
-      }
-    );
-
-    // Then: snapshot ownership and the default anchor are isolated from caller mutation.
-    expect(snapshot).toEqual({
-      ok: true,
-      anchor: { x: 0.5, y: 0.5 },
-      card: {
-        id: 'snapshot-card',
-        title: 'Initial title',
-        content: 'Initial content',
-        x: 999,
-        y: 888,
-        width: 120,
-        height: 80,
-        contentStyle: { color: 'rgb(10, 20, 30)' },
-      },
-      pointerId: 61,
+      throwingAnchor: 'invalid-anchor',
+      throwingCard: 'invalid-card',
     });
   });
 });

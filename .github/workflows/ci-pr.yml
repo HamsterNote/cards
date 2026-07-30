@@ -45,6 +45,10 @@ jobs:
         run: |
           yarn typecheck
 
+      - name: Run external drag test typecheck
+        run: |
+          yarn typecheck:external-card-drag
+
       - name: Build
         run: |
           yarn build
