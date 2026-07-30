@@ -14,8 +14,8 @@ import '@hamster-note/components/styles.css';
 import type { NoteBlock } from '@hamster-note/notes';
 import {
   type CSSProperties,
-  forwardRef,
   Fragment,
+  forwardRef,
   type ReactNode,
   useCallback,
   useEffect,
@@ -39,8 +39,6 @@ import { mergeCardPatch } from '../utils/card-patch';
 import { isCardCanvasInteractivePointerTarget } from '../utils/card-popover-interactions';
 import './CardCanvas.css';
 import { CardCanvasItem } from './CardCanvasItem';
-import type { CardCanvasHandle } from './ExternalCardDrag';
-import { ExternalCardPreview } from './ExternalCardPreview';
 import {
   CardCanvasMiniMap,
   type CardCanvasMiniMapOptions,
@@ -54,6 +52,8 @@ import {
 import type { CardComment } from './CardComments';
 import { CardContentDialog } from './CardContentDialog';
 import { CardLinkConnectors } from './CardLinkConnectors';
+import type { CardCanvasHandle } from './ExternalCardDrag';
+import { ExternalCardPreview } from './ExternalCardPreview';
 import { useExternalCardDragSessions } from './useExternalCardDragSessions';
 
 // 子卡布局模式：
@@ -190,6 +190,8 @@ export interface CardCanvasProps {
   virtualPaper?: boolean | CardCanvasVirtualPaperOptions;
   /** MiniMap 配置。默认关闭，且仅在 virtual paper 启用时生效。 */
   minimap?: false | CardCanvasMiniMapOptions;
+  /** MiniMap 显隐变化回调；与 minimap.enabled 一起传入时用于受控模式。 */
+  onMiniMapChange?: (enabled: boolean) => void;
 }
 
 /** 连线拖拽过程中的实时状态 */
@@ -236,6 +238,7 @@ const CHILDREN_LAYOUT_MODES: readonly CardChildrenLayoutMode[] = [
 ];
 
 const DEFAULT_VIEWPORT: CardCanvasViewport = { scale: 1, x: 0, y: 0 };
+const DEFAULT_MINIMAP_OPTIONS: CardCanvasMiniMapOptions = {};
 const POPOVER_RESTORE_DEBOUNCE_MS = 160;
 function isVirtualPaperEnabled(
   virtualPaper: boolean | CardCanvasVirtualPaperOptions | undefined
@@ -278,6 +281,7 @@ export const CardCanvas = forwardRef<CardCanvasHandle, CardCanvasProps>(
       editable = true,
       virtualPaper,
       minimap,
+      onMiniMapChange,
     }: CardCanvasProps,
     ref
   ) {
@@ -286,6 +290,8 @@ export const CardCanvas = forwardRef<CardCanvasHandle, CardCanvasProps>(
     const canMutateLinks = editable && onCardsChange !== undefined;
     const [uncontrolledLinkMode, setUncontrolledLinkMode] = useState(false);
     const linkMode = linkModeProp ?? uncontrolledLinkMode;
+    const [uncontrolledMiniMapEnabled, setUncontrolledMiniMapEnabled] =
+      useState<boolean>();
     // 当前正在被拖拽的卡片 id（仅有一张卡片在拖拽时才有值），用于隐藏 Popover
     const [movingCardId, setMovingCardId] = useState<string | undefined>();
     // 连线拖拽实时状态：拖拽期间存储源头卡片、指针位置、目标卡片
@@ -304,10 +310,13 @@ export const CardCanvas = forwardRef<CardCanvasHandle, CardCanvasProps>(
     const virtualPaperEnabled = isVirtualPaperEnabled(virtualPaper);
     const minimapOptions =
       minimap === undefined || minimap === false ? undefined : minimap;
+    const minimapRequested =
+      minimapOptions?.enabled ??
+      uncontrolledMiniMapEnabled ??
+      minimapOptions !== undefined;
     const minimapEnabled =
-      virtualPaperEnabled &&
-      minimapOptions !== undefined &&
-      minimapOptions.enabled !== false;
+      virtualPaperEnabled && minimap !== false && minimapRequested;
+    const minimapToggleEnabled = virtualPaperEnabled && minimap !== false;
     const [popoverVisible, setPopoverVisible] = useState(true);
     const popoverRestoreTimeoutRef = useRef<number | undefined>(undefined);
     const previousCardIdsRef = useRef<ReadonlySet<string>>(
@@ -337,6 +346,16 @@ export const CardCanvas = forwardRef<CardCanvasHandle, CardCanvasProps>(
         onLinkModeChange?.(enabled);
       },
       [linkModeProp, onLinkModeChange]
+    );
+
+    const handleMiniMapChange = useCallback(
+      (enabled: boolean) => {
+        if (minimapOptions?.enabled === undefined) {
+          setUncontrolledMiniMapEnabled(enabled);
+        }
+        onMiniMapChange?.(enabled);
+      },
+      [minimapOptions?.enabled, onMiniMapChange]
     );
 
     const setPopoverAnchor = useCallback(
@@ -912,12 +931,12 @@ export const CardCanvas = forwardRef<CardCanvasHandle, CardCanvasProps>(
                 })()}
             </div>
           </CardCanvasVirtualPaper>
-          {minimapEnabled && minimapOptions !== undefined ? (
+          {minimapEnabled ? (
             <CardCanvasMiniMap
               cards={cards}
               contentRef={containerRef}
               hostRef={wrapperRef}
-              options={minimapOptions}
+              options={minimapOptions ?? DEFAULT_MINIMAP_OPTIONS}
               viewport={viewport}
               onInteraction={handleVirtualPaperInteraction}
               onViewportChange={setViewport}
@@ -928,9 +947,12 @@ export const CardCanvas = forwardRef<CardCanvasHandle, CardCanvasProps>(
               addEnabled={canAddCard}
               linkMode={linkMode}
               linkModeEnabled={canMutateLinks}
+              minimapEnabled={minimapEnabled}
+              minimapToggleEnabled={minimapToggleEnabled}
               theme={theme}
               onAddCard={() => onAddCard?.()}
               onLinkModeChange={handleLinkModeChange}
+              onMiniMapChange={handleMiniMapChange}
             />
           ) : null}
           {editable && contentEditorCard !== undefined ? (

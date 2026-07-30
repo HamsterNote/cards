@@ -10,12 +10,15 @@ test('keeps MiniMap off until virtual paper and MiniMap are enabled', async ({
   // Given：两个功能都保持默认关闭。
   const virtualPaperToggle = page.locator('[data-card-virtual-paper-toggle]');
   const minimapToggle = page.locator('[data-card-minimap-toggle]');
+  const toolbarToggle = page.getByRole('button', { name: '缩略图' });
   const minimap = page.getByTestId('card-canvas-minimap');
 
   // Then：非 virtual paper 模式不能打开 MiniMap。
   await expect(virtualPaperToggle).not.toBeChecked();
   await expect(minimapToggle).toBeDisabled();
   await expect(minimapToggle).not.toBeChecked();
+  await expect(toolbarToggle).toBeDisabled();
+  await expect(toolbarToggle).toHaveAttribute('aria-pressed', 'false');
   await expect(minimap).toHaveCount(0);
 
   // When：只打开 virtual paper。
@@ -23,12 +26,27 @@ test('keeps MiniMap off until virtual paper and MiniMap are enabled', async ({
 
   // Then：MiniMap 可开启，但仍保持默认关闭。
   await expect(minimapToggle).toBeEnabled();
+  await expect(toolbarToggle).toBeEnabled();
   await expect(minimap).toHaveCount(0);
 
-  // When：再打开 MiniMap。
-  await minimapToggle.check();
+  // When：通过底部栏打开 MiniMap。
+  await toolbarToggle.click();
 
-  // Then：MiniMap 出现在固定覆盖层中。
+  // Then：MiniMap 出现在固定覆盖层中，且宿主开关同步更新。
+  await expect(minimap).toBeVisible();
+  await expect(toolbarToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(minimapToggle).toBeChecked();
+
+  // When：再次点击底部栏开关。
+  await toolbarToggle.click();
+
+  // Then：MiniMap 与宿主开关同步关闭。
+  await expect(minimap).toHaveCount(0);
+  await expect(toolbarToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(minimapToggle).not.toBeChecked();
+
+  // Given：关闭 virtual paper 前重新打开 MiniMap。
+  await toolbarToggle.click();
   await expect(minimap).toBeVisible();
 
   // When：关闭 virtual paper。
@@ -38,6 +56,8 @@ test('keeps MiniMap off until virtual paper and MiniMap are enabled', async ({
   await expect(minimap).toHaveCount(0);
   await expect(minimapToggle).toBeDisabled();
   await expect(minimapToggle).not.toBeChecked();
+  await expect(toolbarToggle).toBeDisabled();
+  await expect(toolbarToggle).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('pans the virtual paper by clicking the MiniMap background', async ({

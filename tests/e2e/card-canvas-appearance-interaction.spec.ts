@@ -60,6 +60,55 @@ test.describe('CardCanvas appearance and interaction boundaries', () => {
     expect(darkBodyColor).not.toBe(lightBodyColor);
   });
 
+  test('uses a compact empty title bar until its title editor is focused', async ({
+    page,
+  }) => {
+    // Given: a titled card and an empty-title card are rendered side by side.
+    await addCard(page, 'Reference title', 'Reference body');
+    const [referenceCard] = await getCardData(page);
+    expect(referenceCard).toBeDefined();
+    if (referenceCard === undefined) {
+      throw new Error('Expected the reference card data');
+    }
+    await page.evaluate((card) => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            card,
+            {
+              ...card,
+              id: 'card-empty-title',
+              title: '',
+              content: '',
+              x: card.x + card.width + 24,
+            },
+          ],
+        })
+      );
+    }, referenceCard);
+    const normalHeader = page.locator(
+      '[data-card-id="card-1"] .cards-card-canvas__card-header'
+    );
+    const emptyCard = page.locator('[data-card-id="card-empty-title"]');
+    const compactHeader = emptyCard.locator('.cards-card-canvas__card-header');
+    const emptyTitle = emptyCard.locator('[data-card-title-edit]');
+    const normalBox = await getRequiredBox(normalHeader);
+    const compactBox = await getRequiredBox(compactHeader);
+
+    // When: the empty title is resting, then receives editing focus.
+    expect(normalBox.height - compactBox.height).toBeGreaterThanOrEqual(16);
+    await emptyTitle.click();
+    await emptyTitle.fill('Added title');
+
+    // Then: the editor is usable and the title bar keeps its normal height while editing.
+    await expect(emptyTitle).toBeFocused();
+    expect(
+      getCardDataById(await getCardData(page), 'card-empty-title').title
+    ).toBe('Added title');
+    const focusedBox = await getRequiredBox(compactHeader);
+    expect(focusedBox.height).toBeCloseTo(normalBox.height, 0);
+  });
+
   test('moves a card from its body and prevents body text selection', async ({
     page,
   }) => {
@@ -107,7 +156,9 @@ test.describe('CardCanvas appearance and interaction boundaries', () => {
     await content.dblclick();
 
     // Then: the same content Dialog used by the Popover edit action opens.
-    await expect(page.getByRole('dialog', { name: '编辑卡片内容' })).toBeVisible();
+    await expect(
+      page.getByRole('dialog', { name: '编辑卡片内容' })
+    ).toBeVisible();
   });
 
   test('starts a link drag from inert card content while link mode is active', async ({
@@ -175,7 +226,9 @@ test.describe('CardCanvas appearance and interaction boundaries', () => {
 
     // Then: the control remains interactive without opening the card editor or moving the card.
     await expect(hostAction).toHaveAttribute('data-clicked', 'true');
-    await expect(page.getByRole('dialog', { name: '编辑卡片内容' })).toHaveCount(0);
+    await expect(
+      page.getByRole('dialog', { name: '编辑卡片内容' })
+    ).toHaveCount(0);
     const after = getCardDataById(await getCardData(page), 'card-1');
     expect(after.x).toBeCloseTo(before.x, 5);
     expect(after.y).toBeCloseTo(before.y, 5);

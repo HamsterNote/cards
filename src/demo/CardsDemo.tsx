@@ -66,7 +66,6 @@ export function Demo() {
     new URLSearchParams(window.location.search).get('onSelect') !== 'false';
   const [cards, setCards] = useState<CardCanvasCard[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [draftCardId, setDraftCardId] = useState<string>();
   const [selectEventCount, setSelectEventCount] = useState(0);
   const [newCardTitle, setNewCardTitle] = useState('');
   const [newCardContent, setNewCardContent] = useState('');
@@ -118,23 +117,7 @@ export function Demo() {
     };
   }, []);
 
-  useEffect(() => {
-    if (draftCardId === undefined || selected.includes(draftCardId)) return;
-
-    setCards((currentCards) =>
-      currentCards.filter(
-        (card) =>
-          card.id !== draftCardId ||
-          card.title.trim() !== '' ||
-          card.content.trim() !== ''
-      )
-    );
-    setDraftCardId(undefined);
-  }, [draftCardId, selected]);
-
   const handleAddCard = () => {
-    if (!newCardTitle.trim() || !newCardContent.trim()) return;
-
     const nextIndex = cards.length + 1;
     const width = 180;
     const height = 120;
@@ -183,7 +166,6 @@ export function Demo() {
 
     setCards(normalizeMindMapLayout([...cards, newCard]));
     setSelected([newCard.id]);
-    setDraftCardId(newCard.id);
   };
 
   const handleSelect = (id: string) => {
@@ -531,7 +513,8 @@ export function Demo() {
                 onLinkModeChange={setLinkMode}
                 editable={editable}
                 virtualPaper={virtualPaper}
-                minimap={minimap ? {} : false}
+                minimap={{ enabled: minimap }}
+                onMiniMapChange={setMinimap}
                 theme={theme}
                 themeColor={themeColor}
                 {...(linkCallbackEnabled

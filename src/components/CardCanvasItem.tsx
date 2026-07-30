@@ -874,10 +874,11 @@ export function CardCanvasItem({
     event.preventDefault();
     event.stopPropagation();
     if (commitCards === undefined) return;
+    const targetCardTitle = targetCard.title === '' ? '空' : targetCard.title;
 
     const confirmed = await confirm({
       title: '删除链接？',
-      description: `确定要删除与${targetCard.title || '此卡片'}的链接吗？`,
+      description: `确定要删除与${targetCardTitle}的链接吗？`,
       confirmText: '删除',
       cancelText: '取消',
       tone: 'danger',
@@ -1021,6 +1022,7 @@ export function CardCanvasItem({
         <div
           ref={headerRef}
           className="cards-card-canvas__card-header"
+          data-card-title-empty={card.title === '' ? 'true' : undefined}
           style={titleStyle}
         >
           {renderCardTitle ? (
@@ -1085,41 +1087,45 @@ export function CardCanvasItem({
           flex-shrink:0 保证 Links 始终完整展示，空间不足时由 content 区域滚动。 */}
       {linkedCards.length > 0 && (
         <div className="cards-card-canvas__card-footer" data-card-link-footer>
-          {linkedCards.map((targetCard) => (
-            <div key={targetCard.id} className="cards-card-canvas__link-row">
-              <button
-                type="button"
-                className="cards-card-canvas__link-button"
-                data-card-link-source-id={card.id}
-                data-card-link-target-id={targetCard.id}
-                onClick={(event) => handleLinkButtonClick(event, targetCard)}
-                onPointerDownCapture={handleLinkButtonPointerDown}
-                onPointerDown={handleLinkButtonPointerDown}
-                onMouseDown={handleLinkButtonMouseDown}
-                onKeyDown={(event) =>
-                  handleLinkButtonKeyDown(event, targetCard)
-                }
-              >
-                <Icon name="link" />
-                <span>{targetCard.title}</span>
-              </button>
-              {commitCards === undefined ? null : (
+          {linkedCards.map((targetCard) => {
+            const targetCardTitle =
+              targetCard.title === '' ? '空' : targetCard.title;
+            return (
+              <div key={targetCard.id} className="cards-card-canvas__link-row">
                 <button
                   type="button"
-                  className="cards-card-canvas__link-delete-button"
-                  aria-label={`删除与 ${targetCard.title || '未命名卡片'} 的链接`}
-                  data-card-link-delete-source-id={card.id}
-                  data-card-link-delete-target-id={targetCard.id}
-                  onClick={(event) => handleDeleteLink(event, targetCard)}
+                  className="cards-card-canvas__link-button"
+                  data-card-link-source-id={card.id}
+                  data-card-link-target-id={targetCard.id}
+                  onClick={(event) => handleLinkButtonClick(event, targetCard)}
                   onPointerDownCapture={handleLinkButtonPointerDown}
                   onPointerDown={handleLinkButtonPointerDown}
                   onMouseDown={handleLinkButtonMouseDown}
+                  onKeyDown={(event) =>
+                    handleLinkButtonKeyDown(event, targetCard)
+                  }
                 >
-                  <Icon name="delete" />
+                  <Icon name="link" />
+                  <span>{targetCardTitle}</span>
                 </button>
-              )}
-            </div>
-          ))}
+                {commitCards === undefined ? null : (
+                  <button
+                    type="button"
+                    className="cards-card-canvas__link-delete-button"
+                    aria-label={`删除与 ${targetCardTitle} 的链接`}
+                    data-card-link-delete-source-id={card.id}
+                    data-card-link-delete-target-id={targetCard.id}
+                    onClick={(event) => handleDeleteLink(event, targetCard)}
+                    onPointerDownCapture={handleLinkButtonPointerDown}
+                    onPointerDown={handleLinkButtonPointerDown}
+                    onMouseDown={handleLinkButtonMouseDown}
+                  >
+                    <Icon name="delete" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       {card.lock ? null : (

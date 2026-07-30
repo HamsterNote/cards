@@ -264,6 +264,46 @@ test.describe('CardCanvas link mode', () => {
     );
   });
 
+  test('shows 空 when a linked card has an empty title', async ({ page }) => {
+    // Given: a linked pair whose target card has a strictly empty title.
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            {
+              id: 'card-1',
+              title: 'Alpha',
+              content: 'Alpha content',
+              x: -120,
+              y: -60,
+              width: 180,
+              height: 120,
+              linkedCardIds: ['card-2'],
+            },
+            {
+              id: 'card-2',
+              title: '',
+              content: '',
+              x: 120,
+              y: -60,
+              width: 180,
+              height: 120,
+              linkedCardIds: ['card-1'],
+            },
+          ],
+        })
+      );
+    });
+
+    // When: the reciprocal footer and connector controls render the relationship.
+    const footerLink = page.locator(
+      '[data-card-link-source-id="card-1"][data-card-link-target-id="card-2"]'
+    );
+
+    // Then: the empty linked title uses the visible fallback.
+    await expect(footerLink.locator('span')).toHaveText('空');
+  });
+
   test('selects the link target card when its footer link is clicked', async ({
     page,
   }) => {

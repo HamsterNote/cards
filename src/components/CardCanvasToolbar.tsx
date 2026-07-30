@@ -5,18 +5,24 @@ export type CardCanvasToolbarProps = {
   readonly addEnabled: boolean;
   readonly linkMode: boolean;
   readonly linkModeEnabled: boolean;
+  readonly minimapEnabled: boolean;
+  readonly minimapToggleEnabled: boolean;
   readonly theme: CardsTheme;
   readonly onAddCard: () => void;
   readonly onLinkModeChange: (enabled: boolean) => void;
+  readonly onMiniMapChange: (enabled: boolean) => void;
 };
 
 export function CardCanvasToolbar({
   addEnabled,
   linkMode,
   linkModeEnabled,
+  minimapEnabled,
+  minimapToggleEnabled,
   theme,
   onAddCard,
   onLinkModeChange,
+  onMiniMapChange,
 }: CardCanvasToolbarProps) {
   return (
     <Popover
@@ -52,6 +58,19 @@ export function CardCanvasToolbar({
       >
         <Icon name="link" />
         <span className="cards-card-canvas__action-label">链接模式</span>
+      </Button>
+      <Button
+        aria-label="缩略图"
+        aria-pressed={minimapEnabled}
+        data-card-canvas-minimap-button
+        disabled={!minimapToggleEnabled}
+        size="small"
+        type="button"
+        variant={minimapEnabled ? 'primary' : 'ghost'}
+        onClick={() => onMiniMapChange(!minimapEnabled)}
+      >
+        <Icon name="minimap" />
+        <span className="cards-card-canvas__action-label">缩略图</span>
       </Button>
     </Popover>
   );

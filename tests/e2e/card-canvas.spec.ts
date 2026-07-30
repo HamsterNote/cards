@@ -482,21 +482,25 @@ test.describe('CardCanvas select-on-add toggle', () => {
     );
   });
 
-  test('does not create cards or change selection when title or content is empty', async ({
+  test('creates cards when title, content, or both are empty', async ({
     page,
   }) => {
+    // Given: the Demo form is completely blank.
     await page.locator('[data-card-title-input]').fill('');
     await page.locator('[data-card-content-input]').fill('');
+
+    // When: the user creates an empty card, a title-only card, and a content-only card.
     await page.getByRole('button', { name: 'Add Card' }).click();
+    await addCard(page, 'Only Title', '');
+    await addCard(page, '', 'Only content');
 
-    await expect(page.locator('[data-card-id]')).toHaveCount(0);
-    await expect(page.locator('[data-card-data-content]')).toHaveText('[]');
-    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
-
-    await page.locator('[data-card-title-input]').fill('Only Title');
-    await page.getByRole('button', { name: 'Add Card' }).click();
-
-    await expect(page.locator('[data-card-id]')).toHaveCount(0);
+    // Then: all three valid empty-field combinations remain in controlled data.
+    await expect(page.locator('[data-card-id]')).toHaveCount(3);
+    expect(await getCardData(page)).toMatchObject([
+      { id: 'card-1', title: '', content: '' },
+      { id: 'card-2', title: 'Only Title', content: '' },
+      { id: 'card-3', title: '', content: 'Only content' },
+    ]);
   });
 });
 

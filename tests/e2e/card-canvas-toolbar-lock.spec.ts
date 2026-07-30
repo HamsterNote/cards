@@ -88,7 +88,7 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     await expect(page.locator('[data-card-id]')).toHaveCount(1);
   });
 
-  test('uses the host validation for an incomplete Demo form request', async ({
+  test('creates a card from an incomplete Demo form request', async ({
     page,
   }) => {
     // Given: only the title half of the Demo form is complete.
@@ -98,9 +98,16 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     // When: the user submits the incomplete Demo form.
     await page.locator('[data-card-add-button]').click();
 
-    // Then: Demo validation rejects the request without clearing its input.
-    await expect(page.locator('[data-card-id]')).toHaveCount(0);
-    await expect(titleInput).toHaveValue('Incomplete card');
+    // Then: the host keeps the title-only card and clears the submitted input.
+    await expect(page.locator('[data-card-id]')).toHaveCount(1);
+    await expect(page.locator('[data-card-id]')).toContainText(
+      'Incomplete card'
+    );
+    await expect(titleInput).toHaveValue('');
+    expect((await getCardData(page))[0]).toMatchObject({
+      title: 'Incomplete card',
+      content: '',
+    });
   });
 
   test('preserves a host card when controlled selection is cleared', async ({
@@ -216,10 +223,14 @@ test.describe('CardCanvas toolbar and lock behavior', () => {
     await addCardFromDemoForm(page, 'Touch selection');
 
     // When: a touch pointer starts on blank virtual paper.
-    await page.locator('[data-card-virtual-paper="true"]').dispatchEvent(
-      'pointerdown',
-      { pointerType: 'touch', pointerId: 7, button: 0, bubbles: true }
-    );
+    await page
+      .locator('[data-card-virtual-paper="true"]')
+      .dispatchEvent('pointerdown', {
+        pointerType: 'touch',
+        pointerId: 7,
+        button: 0,
+        bubbles: true,
+      });
 
     // Then: controlled selection is cleared through the same single document path.
     await expect(page.locator('[data-card-selected-display]')).toBeEmpty();

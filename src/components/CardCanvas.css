@@ -460,6 +460,21 @@
   cursor: grab;
 }
 
+.cards-card-canvas__card-header[data-card-title-empty='true'] {
+  padding: 0 12px;
+}
+
+.cards-card-canvas__card-header[data-card-title-empty='true']:focus-within {
+  padding: 8px 12px;
+}
+
+.cards-card-canvas__card-header[data-card-title-empty='true']
+  .cards-card-canvas__card-title-edit {
+  display: block;
+  min-width: 100%;
+  max-width: 100%;
+}
+
 .cards-card-canvas__card-title-edit {
   display: inline-block;
   min-width: 1ch;

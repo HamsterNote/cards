@@ -19,10 +19,10 @@ test('creates a visible draft when the empty canvas toolbar add button is clicke
   await expect(card.locator('[data-card-title-edit]')).toBeFocused();
 });
 
-test('discards an untouched toolbar draft after selection leaves it', async ({
+test('preserves an untouched empty card after selection leaves it', async ({
   page,
 }) => {
-  // Given: the toolbar created a selected blank draft.
+  // Given: the toolbar created a selected blank card.
   await page.goto('/?onSelect=false');
   await page.locator('[data-card-canvas-add-button]').click();
   await expect(page.locator('[data-card-id]')).toHaveCount(1);
@@ -34,6 +34,6 @@ test('discards an untouched toolbar draft after selection leaves it', async ({
   if (box === null) throw new Error('Expected canvas stage bounds');
   await page.mouse.click(box.x + 20, box.y + 20);
 
-  // Then: the untouched empty draft is removed.
-  await expect(page.locator('[data-card-id]')).toHaveCount(0);
+  // Then: the untouched empty card remains on the canvas.
+  await expect(page.locator('[data-card-id]')).toHaveCount(1);
 });
