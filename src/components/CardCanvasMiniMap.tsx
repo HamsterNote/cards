@@ -117,7 +117,10 @@ export function CardCanvasMiniMap({
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0))
+    if (
+      !event.isPrimary ||
+      (event.pointerType === 'mouse' && event.button !== 0)
+    )
       return;
 
     const container = containerRef.current;

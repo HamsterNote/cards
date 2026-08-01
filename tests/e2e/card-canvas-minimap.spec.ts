@@ -131,12 +131,10 @@ test('maps the visible viewport from the canvas-centered world origin', async ({
   const geometry = await Promise.all([
     host.boundingBox(),
     card.getAttribute('style'),
-    minimap
-      .locator('.cards-card-canvas__minimap-card')
-      .evaluate((element) => ({
-        x: Number(element.getAttribute('x')),
-        width: Number(element.getAttribute('width')),
-      })),
+    minimap.locator('.cards-card-canvas__minimap-card').evaluate((element) => ({
+      x: Number(element.getAttribute('x')),
+      width: Number(element.getAttribute('width')),
+    })),
     minimap.locator('[data-card-minimap-indicator]').evaluate((element) => ({
       x: Number(element.getAttribute('x')),
       width: Number(element.getAttribute('width')),

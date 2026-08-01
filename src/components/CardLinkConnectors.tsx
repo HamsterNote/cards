@@ -4,10 +4,13 @@ import {
   Icon,
   Popover,
   ThemeProvider,
-  type ThemeAccent,
 } from '@hamster-note/components';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getThemeAccentStyle, type CardsTheme } from '../theme';
+import {
+  type CardsTheme,
+  type CardsThemeAccent,
+  getThemeAccentStyle,
+} from '../theme';
 import {
   buildCardLinkPairs,
   removeSymmetricCardLink,
@@ -19,7 +22,7 @@ interface CardLinkConnectorsProps {
   readonly commitCards?: (cards: CardCanvasCard[]) => void;
   readonly getCards: () => CardCanvasCard[];
   readonly theme: CardsTheme;
-  readonly themeColor: ThemeAccent;
+  readonly themeColor: CardsThemeAccent;
 }
 
 function getPairKey(fromId: string, toId: string): string {

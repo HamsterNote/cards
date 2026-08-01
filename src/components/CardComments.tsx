@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import './CardComments.css';
 import { CardCommentThread } from './CardCommentThread';
 
@@ -31,6 +31,7 @@ export function CardComments({
   const [replyDraft, setReplyDraft] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string>();
   const [editDraft, setEditDraft] = useState('');
+  const newCommentInputId = useId();
 
   const resetActiveForm = () => {
     setReplyToCommentId(undefined);
@@ -104,14 +105,14 @@ export function CardComments({
       >
         <label
           className="cards-card-comments__label"
-          htmlFor="card-comment-input"
+          htmlFor={newCommentInputId}
         >
           添加评论
         </label>
         <textarea
           className="cards-card-comments__input"
           data-card-comment-input
-          id="card-comment-input"
+          id={newCommentInputId}
           value={newCommentDraft}
           onChange={(event) => setNewCommentDraft(event.target.value)}
         />

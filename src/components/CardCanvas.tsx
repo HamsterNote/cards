@@ -5,13 +5,11 @@ import {
   MenuItem,
   MenuSubmenu,
   Popover,
-  type ThemeAccent,
   ThemeProvider,
 } from '@hamster-note/components';
 // 共享组件库样式：提供 .hn-popover 浮层外观（背景/边框/阴影/主题变量）。
 // 样式会被打进本库的 dist/cards.css，使用方无需再单独引入。
 import '@hamster-note/components/styles.css';
-import type { NoteBlock } from '@hamster-note/notes';
 import {
   type CSSProperties,
   Fragment,
@@ -24,7 +22,12 @@ import {
   useRef,
   useState,
 } from 'react';
-import { type CardsTheme, getThemeAccentStyle } from '../theme';
+import {
+  type CardsTheme,
+  type CardsThemeAccent,
+  getThemeAccentStyle,
+} from '../theme';
+import type { CardContentBlock } from '../types/card-content';
 import {
   createParagraphBlocksFromText,
   extractPlainTextFromBlocks,
@@ -81,10 +84,10 @@ export interface CardCanvasCard {
   /** 隐藏标题栏、仅展示正文的 headless 卡片形态。 */
   headless?: boolean;
   /**
-   * 富文本内容块（@hamster-note/notes 的 NoteBlock）。
-   * 提供后卡片内容区默认用 NoteContent 只读渲染，并在正文 Dialog 中作为编辑真相源。
+   * 富文本内容块。提供后卡片内容区会用内置富文本视图渲染，
+   * 并在正文 Dialog 中作为编辑真相源。
    */
-  contentBlocks?: readonly NoteBlock[];
+  contentBlocks?: readonly CardContentBlock[];
   /** X轴坐标 */
   x: number;
   /** Y轴坐标 */
@@ -169,7 +172,7 @@ export interface CardCanvasProps {
   /** 主题：light（默认）或 dark */
   theme?: CardsTheme;
   /** 共享组件的 accent 主题色；支持组件库预设名或任意 CSS 颜色。 */
-  themeColor?: ThemeAccent;
+  themeColor?: CardsThemeAccent;
   /** 连线模式下，点击目标卡片时的回调 */
   onLinkClick?: (
     targetCard: CardCanvasCard,

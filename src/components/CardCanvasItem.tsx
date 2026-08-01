@@ -1,5 +1,5 @@
 import { confirm, Icon } from '@hamster-note/components';
-import { type NoteBlock, NoteContent } from '@hamster-note/notes';
+import { NoteContent } from '@hamster-note/notes';
 // notes 富文本编辑器样式：打进本库 dist/cards.css，使用方无需单独引入
 import '@hamster-note/notes/styles.css';
 import {
@@ -20,6 +20,7 @@ import {
   useRef,
 } from 'react';
 import type { CardsTheme } from '../theme';
+import type { CardContentBlock } from '../types/card-content';
 import { resolveCardContentBlocks } from '../utils/card-content-blocks';
 import {
   getMindMapLayoutMode,
@@ -969,7 +970,7 @@ export function CardCanvasItem({
   const showNoteContent =
     card.content !== '' || (card.contentBlocks?.length ?? 0) > 0;
 
-  const noteBlocks = useMemo<readonly NoteBlock[]>(
+  const noteBlocks = useMemo<readonly CardContentBlock[]>(
     () => resolveCardContentBlocks(card.id, card.content, card.contentBlocks),
     [card.contentBlocks, card.id, card.content]
   );

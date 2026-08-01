@@ -1,12 +1,12 @@
-import {
-  Button,
-  Dialog,
-  ThemeProvider,
-  type ThemeAccent,
-} from '@hamster-note/components';
-import { type NoteBlock, NoteContent } from '@hamster-note/notes';
+import { Button, Dialog, ThemeProvider } from '@hamster-note/components';
+import { NoteContent } from '@hamster-note/notes';
 import { useState } from 'react';
-import { getThemeAccentStyle, type CardsTheme } from '../theme';
+import {
+  type CardsTheme,
+  type CardsThemeAccent,
+  getThemeAccentStyle,
+} from '../theme';
+import type { CardContentBlock } from '../types/card-content';
 import {
   extractPlainTextFromBlocks,
   resolveCardContentBlocks,
@@ -16,7 +16,7 @@ import type { CardCanvasCard } from './CardCanvas';
 export interface CardContentDialogProps {
   readonly card: CardCanvasCard;
   readonly theme: CardsTheme;
-  readonly themeColor: ThemeAccent;
+  readonly themeColor: CardsThemeAccent;
   readonly onClose: () => void;
   readonly onSave: (
     content: Pick<CardCanvasCard, 'content' | 'contentBlocks'>
@@ -34,7 +34,7 @@ export function CardContentDialog({
     resolveCardContentBlocks(card.id, card.content, card.contentBlocks)
   );
   const [draftStarted, setDraftStarted] = useState(false);
-  const [draftBlocks, setDraftBlocks] = useState<readonly NoteBlock[]>();
+  const [draftBlocks, setDraftBlocks] = useState<readonly CardContentBlock[]>();
   const blocks =
     draftBlocks ??
     (draftStarted

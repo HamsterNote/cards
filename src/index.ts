@@ -26,7 +26,8 @@ export type {
   ExternalCardDragStartRejectReason,
   ExternalCardDragStartResult,
 } from './components/ExternalCardDrag';
-export type { CardsTheme } from './theme';
+export type { CardsTheme, CardsThemeAccent } from './theme';
+export type { CardContentBlock } from './types/card-content';
 export { CARD_CANVAS_POPOVER_OVERLAY_ATTRIBUTE } from './utils/card-popover-interactions';
 export {
   type ContentInset,
