@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-02
+
+### Added
+
+- 新增 MiniMap 工具栏按钮，支持空白卡片标题
+- 新增外部卡片拖入功能，包含完整的生命周期模块和全面的测试覆盖
+- 新增主题色选择和编辑器改进
+- 整合卡片菜单到弹出窗口，新增无头卡片模式，统一拖拽表面
+- 新增卡片锁定、内容对话框、工具栏和连接器 UI
+- 新增内联编辑、评论、富文本和虚拟纸张支持
+- 解耦富文本协议，验证打包消费者
+
 ## [0.3.2] - 2026-07-21
 
 ### Fixed
