@@ -5,6 +5,7 @@ import {
   buildCardLinkPairs,
   findTopmostLinkTargetId,
   normalizeLinkedCardIds,
+  removeSymmetricCardLink,
   resolveLinkedCards,
 } from '../../src/utils/card-links';
 
@@ -97,6 +98,31 @@ test.describe('card link utilities', () => {
     expect(result.find((card) => card.id === 'beta')?.linkedCardIds).toEqual([
       'alpha',
     ]);
+  });
+
+  test('removes a symmetric link without mutating frozen card inputs', () => {
+    // Given: two immutable cards reference each other and retain unrelated links.
+    const cards = freezeCards([
+      makeCard('alpha', ['beta', 'gamma']),
+      makeCard('beta', ['alpha']),
+      makeCard('gamma', ['alpha']),
+    ]);
+    const before = snapshotCards(cards);
+
+    // When: the alpha-beta relationship is removed.
+    const result = removeSymmetricCardLink(cards, 'alpha', 'beta');
+
+    // Then: both relationship ends disappear while other links and inputs remain intact.
+    expect(result.find((card) => card.id === 'alpha')?.linkedCardIds).toEqual([
+      'gamma',
+    ]);
+    expect(result.find((card) => card.id === 'beta')?.linkedCardIds).toEqual(
+      []
+    );
+    expect(result.find((card) => card.id === 'gamma')?.linkedCardIds).toEqual([
+      'alpha',
+    ]);
+    expectCardsUnchanged(cards, before);
   });
 
   test('treats a self-link request as a no-op', () => {

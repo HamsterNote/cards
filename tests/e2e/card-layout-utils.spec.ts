@@ -5,6 +5,10 @@ import {
   normalizeMindMapLayout,
   shouldNormalizeMindMapAfterCardUpdate,
 } from '../../src/utils/card-layout';
+import {
+  finalizeCardDragLayout,
+  resizeCardWithMindMapNormalization,
+} from '../../src/utils/card-layout-interactions';
 
 function makeCard(id: string, parent?: string): CardCanvasCard {
   const baseCard = {
@@ -42,6 +46,30 @@ function expectCardsUnchanged(
 ): void {
   expect(JSON.stringify(cards)).toBe(snapshot);
 }
+
+test.describe('finalizeCardDragLayout utility', () => {
+  test('does not reparent a locked card when called directly', () => {
+    // Given: a locked card overlaps a valid drop parent.
+    const locked = { ...makeCard('locked'), x: 200, y: 200, lock: true };
+    const parent = { ...makeCard('parent'), width: 100, height: 100 };
+
+    // When: drag finalization is invoked directly for the locked card.
+    const result = finalizeCardDragLayout(
+      [locked, parent],
+      locked.id,
+      { x: 50, y: 50 },
+      new Set([locked.id]),
+      {
+        contentInset: { top: 0, right: 0, bottom: 0, left: 0 },
+        dragStartPosition: { x: locked.x, y: locked.y },
+      }
+    );
+
+    // Then: no parent, z-index, or geometry data changes.
+    expect(result.cards).toEqual([locked, parent]);
+    expect(result.draggedCard).toBe(locked);
+  });
+});
 
 test.describe('normalizeMindMapLayout utility', () => {
   test('positions two direct children with the deterministic horizontal formula', () => {
@@ -151,6 +179,42 @@ test.describe('normalizeMindMapLayout utility', () => {
       x: 258,
       y: 80,
     });
+  });
+
+  test('keeps a locked child subtree stationary during mind-map normalization', () => {
+    // Given: a mind-map parent has a locked child with a descendant.
+    const lockedChild = {
+      ...makeCard('locked-child', 'root'),
+      x: 500,
+      y: 400,
+      lock: true,
+    };
+    const descendant = {
+      ...makeCard('descendant', lockedChild.id),
+      x: 540,
+      y: 470,
+    };
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        width: 180,
+        height: 120,
+        childrenLayoutMode: 'mind-map-horizontal',
+      },
+      lockedChild,
+      descendant,
+    ]);
+
+    // When: mind-map normalization attempts to reposition the child.
+    const result = normalizeMindMapLayout(cards);
+
+    // Then: the locked boundary preserves both cards' geometry.
+    expect(result.find((card) => card.id === lockedChild.id)).toEqual(
+      lockedChild
+    );
+    expect(result.find((card) => card.id === descendant.id)).toEqual(
+      descendant
+    );
   });
 
   test('supports negative parent coordinates without rounding', () => {
@@ -458,6 +522,79 @@ test.describe('normalizeMindMapLayout — arrange mode', () => {
 
     expect(emptyResult).toEqual([]);
     expect(freeResult).toEqual(freeCards);
+  });
+
+  test('keeps a locked child subtree stationary during arrange normalization', () => {
+    // Given: an arrange parent contains a locked child with an unlocked descendant.
+    const lockedChild = {
+      ...makeCard('locked-child', 'root'),
+      x: 500,
+      y: 400,
+      lock: true,
+      childrenLayoutMode: 'arrange',
+    } satisfies CardCanvasCard;
+    const descendant = {
+      ...makeCard('descendant', lockedChild.id),
+      x: 540,
+      y: 470,
+    };
+    const cards = freezeCards([
+      {
+        ...makeCard('root'),
+        width: 300,
+        height: 120,
+        childrenLayoutMode: 'arrange',
+      },
+      lockedChild,
+      descendant,
+    ]);
+
+    // When: layout normalization attempts to arrange the hierarchy.
+    const result = normalizeMindMapLayout(cards);
+
+    // Then: lock forms a geometry boundary for the entire nested subtree.
+    expect(result.find((card) => card.id === lockedChild.id)).toEqual(
+      lockedChild
+    );
+    expect(result.find((card) => card.id === descendant.id)).toEqual(
+      descendant
+    );
+  });
+
+  test('does not expand a locked arrange parent', () => {
+    // Given: a locked arrange parent is too small to contain its child.
+    const parent = {
+      ...makeCard('root'),
+      width: 120,
+      height: 80,
+      lock: true,
+      childrenLayoutMode: 'arrange',
+    } satisfies CardCanvasCard;
+    const cards = freezeCards([
+      parent,
+      { ...makeCard('child', parent.id), width: 260, height: 180 },
+    ]);
+
+    // When: arrange normalization computes the required parent bounds.
+    const result = normalizeMindMapLayout(cards);
+
+    // Then: the locked parent's dimensions remain unchanged.
+    expect(result.find((card) => card.id === parent.id)).toEqual(parent);
+  });
+
+  test('does not resize a locked card through the layout utility', () => {
+    // Given: a locked card and larger requested dimensions.
+    const lockedCard = { ...makeCard('locked'), lock: true };
+
+    // When: the resize utility is called directly.
+    const result = resizeCardWithMindMapNormalization([lockedCard], 'locked', {
+      width: 240,
+      height: 160,
+    });
+
+    // Then: defense in depth preserves the locked geometry.
+    expect(result.cards).toEqual([lockedCard]);
+    expect(result.draggedCard).toEqual(lockedCard);
   });
 
   test('normalizes card patches only when layout fields change', () => {

@@ -1,11 +1,23 @@
-import { useEffect, useState } from 'react';
-import { Button, CardCanvas, deleteCards } from '../index';
-import type {
-  CardCanvasCard,
-  CardChildrenLayoutMode,
-  CardsTheme,
+import {
+  Button as ComponentsButton,
+  confirm,
+  Dialog,
+  Icon,
+  THEME_ACCENTS,
+  type ThemeAccent,
+} from '@hamster-note/components';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Button,
+  CardCanvas,
+  type CardCanvasCard,
+  type CardCanvasHandle,
+  CardComments,
+  type CardsTheme,
+  deleteCards,
 } from '../index';
 import { normalizeMindMapLayout } from '../utils/card-layout';
+import { ExternalCardDragSource } from './ExternalCardDragSource';
 
 type LastLinkResult = {
   readonly sourceId: string;
@@ -41,7 +53,17 @@ function isSetCardsEvent(
   );
 }
 
+function isSetSelectedEvent(event: Event): event is CustomEvent<string[]> {
+  return (
+    event instanceof CustomEvent &&
+    Array.isArray(event.detail) &&
+    event.detail.every((id) => typeof id === 'string')
+  );
+}
+
 export function Demo() {
+  const selectCallbackEnabled =
+    new URLSearchParams(window.location.search).get('onSelect') !== 'false';
   const [cards, setCards] = useState<CardCanvasCard[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [selectEventCount, setSelectEventCount] = useState(0);
@@ -59,11 +81,18 @@ export function Demo() {
   const [selectOnMoveEnd, setSelectOnMoveEnd] = useState(false);
   const [selectNewCardOnAdd, setSelectNewCardOnAdd] = useState(true);
   const [linkMode, setLinkMode] = useState(false);
+  const [commentingCardId, setCommentingCardId] = useState<string>();
+  const [editable, setEditable] = useState(true);
+  const [virtualPaper, setVirtualPaper] = useState(false);
+  const [minimap, setMinimap] = useState(false);
   const [theme, setTheme] = useState<CardsTheme>('light');
+  const [themeColor, setThemeColor] = useState<ThemeAccent>('violet');
+  const [customThemeColor, setCustomThemeColor] = useState('');
   const [linkCallbackEnabled, setLinkCallbackEnabled] = useState(true);
   const [lastLinkResult, setLastLinkResult] = useState<LastLinkResult | null>(
     null
   );
+  const canvasRef = useRef<CardCanvasHandle>(null);
 
   useEffect(() => {
     const handleSetCards = (event: Event) => {
@@ -71,16 +100,24 @@ export function Demo() {
         setCards([...event.detail]);
       }
     };
+    const handleSetSelected = (event: Event) => {
+      if (isSetSelectedEvent(event)) {
+        setSelected([...event.detail]);
+      }
+    };
 
     window.addEventListener('card-canvas-demo:set-cards', handleSetCards);
+    window.addEventListener('card-canvas-demo:set-selected', handleSetSelected);
     return () => {
       window.removeEventListener('card-canvas-demo:set-cards', handleSetCards);
+      window.removeEventListener(
+        'card-canvas-demo:set-selected',
+        handleSetSelected
+      );
     };
   }, []);
 
   const handleAddCard = () => {
-    if (!newCardTitle.trim() || !newCardContent.trim()) return;
-
     const nextIndex = cards.length + 1;
     const width = 180;
     const height = 120;
@@ -112,13 +149,34 @@ export function Demo() {
     setNewCardParent('');
   };
 
+  const handleAddDraftCard = () => {
+    const nextIndex = cards.length + 1;
+    const width = 180;
+    const height = 120;
+    const newCard: CardCanvasCard = {
+      id: `card-${nextIndex}`,
+      title: '',
+      content: '',
+      x: -width / 2,
+      y: -height / 2,
+      width,
+      height,
+      zIndex: nextIndex,
+    };
+
+    setCards(normalizeMindMapLayout([...cards, newCard]));
+    setSelected([newCard.id]);
+  };
+
   const handleSelect = (id: string) => {
     setSelected([id]);
+    setCommentingCardId(undefined);
     setSelectEventCount((count) => count + 1);
   };
 
   const handleClearSelection = () => {
     setSelected([]);
+    setCommentingCardId(undefined);
   };
 
   const handleLinkClick = (
@@ -133,25 +191,39 @@ export function Demo() {
     });
   };
 
-  const handleDeleteSelected = async () => {
-    if (selected.length === 0) return;
-
+  const handleDeleteCards = async (deleteIds: readonly string[]) => {
     const newCards = await deleteCards(
       cards,
-      selected,
-      async (_cards, _deleteIds, meta) => {
-        if (meta.hasChildren) {
-          return window.confirm('Delete this card and its child cards?');
-        }
-        return true;
-      }
+      deleteIds,
+      async (_cards, _deleteIds, meta) =>
+        confirm({
+          title: 'Delete card?',
+          description: meta.hasChildren
+            ? 'Delete this card and its child cards? This action cannot be undone.'
+            : 'This action cannot be undone.',
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+          tone: 'danger',
+        })
     );
+
+    if (newCards === cards) return;
 
     setCards(normalizeMindMapLayout(newCards));
     setSelected((prev) =>
       prev.filter((id) => newCards.some((card) => card.id === id))
     );
+    setCommentingCardId((cardId) =>
+      cardId !== undefined && newCards.some((card) => card.id === cardId)
+        ? cardId
+        : undefined
+    );
   };
+
+  const commentingCard =
+    commentingCardId === undefined
+      ? undefined
+      : cards.find((card) => card.id === commentingCardId);
 
   return (
     <main className="demo" data-theme={theme}>
@@ -200,14 +272,20 @@ export function Demo() {
               Add Card
             </Button>
             <Button
+              aria-label="Delete selected cards"
               data-testid="delete-selected-card"
               variant="filled"
               size="md"
               theme={theme}
-              disabled={selected.length === 0}
-              onClick={handleDeleteSelected}
+              disabled={
+                selected.length === 0 ||
+                selected.every(
+                  (id) => cards.find((card) => card.id === id)?.lock === true
+                )
+              }
+              onClick={() => handleDeleteCards(selected)}
             >
-              Delete Selected
+              <Icon name="delete" />
             </Button>
             <div className="demo__form-group">
               <label htmlFor="card-title-bg">Title Background</label>
@@ -244,6 +322,46 @@ export function Demo() {
                 onChange={(e) => setNewCardParent(e.target.value)}
                 placeholder="Parent ID"
               />
+            </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-editable-toggle
+                  checked={editable}
+                  onChange={(event) => setEditable(event.target.checked)}
+                />
+                Edit cards directly
+              </label>
+            </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-virtual-paper-toggle
+                  checked={virtualPaper}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setVirtualPaper(enabled);
+                    if (!enabled) {
+                      setMinimap(false);
+                    }
+                  }}
+                />
+                Enable virtual paper
+              </label>
+            </div>
+            <div className="demo__form-group demo__form-group--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  data-card-minimap-toggle
+                  checked={minimap}
+                  disabled={!virtualPaper}
+                  onChange={(event) => setMinimap(event.target.checked)}
+                />
+                Enable MiniMap
+              </label>
             </div>
             <div className="demo__form-group demo__form-group--checkbox">
               <label>
@@ -302,6 +420,48 @@ export function Demo() {
                 Enable link callback
               </label>
             </div>
+            <fieldset
+              className="card-canvas-demo-accent"
+              data-card-theme-accent
+            >
+              <legend>Theme accent</legend>
+              <div className="card-canvas-demo-accent__options">
+                {Object.entries(THEME_ACCENTS).map(([name, accent]) => (
+                  <button
+                    key={name}
+                    aria-label={`${name} theme accent`}
+                    aria-pressed={themeColor === name}
+                    className="card-canvas-demo-accent__option"
+                    data-card-theme-accent-option={name}
+                    style={{ backgroundColor: accent.accent }}
+                    title={name}
+                    type="button"
+                    onClick={() => {
+                      setThemeColor(name);
+                      setCustomThemeColor('');
+                    }}
+                  />
+                ))}
+              </div>
+              <label htmlFor="card-theme-accent-custom">Custom hex</label>
+              <input
+                aria-invalid={
+                  customThemeColor !== '' &&
+                  !/^#[\da-f]{6}$/i.test(customThemeColor)
+                }
+                data-card-theme-accent-custom
+                id="card-theme-accent-custom"
+                placeholder="#7c83ff"
+                value={customThemeColor}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setCustomThemeColor(nextValue);
+                  if (/^#[\da-f]{6}$/i.test(nextValue)) {
+                    setThemeColor(nextValue.toLowerCase());
+                  }
+                }}
+              />
+            </fieldset>
             <div className="demo__form-group demo__form-group--checkbox">
               <label>
                 <input
@@ -335,122 +495,77 @@ export function Demo() {
                 )}
               </div>
             </div>
+            <ExternalCardDragSource canvasRef={canvasRef} />
           </div>
           <div className="card-canvas-demo-stage">
             <div className="card-canvas-demo-stage-wrapper">
               <CardCanvas
+                ref={canvasRef}
                 cards={cards}
                 onCardsChange={setCards}
+                onAddCard={handleAddDraftCard}
                 selected={selected}
-                onSelect={handleSelect}
+                {...(selectCallbackEnabled ? { onSelect: handleSelect } : {})}
                 onClearSelection={handleClearSelection}
                 className="card-canvas-demo-transform"
                 options={{ requireSelectionToMoveResize, selectOnMoveEnd }}
                 linkMode={linkMode}
+                onLinkModeChange={setLinkMode}
+                editable={editable}
+                virtualPaper={virtualPaper}
+                minimap={{ enabled: minimap }}
+                onMiniMapChange={setMinimap}
                 theme={theme}
+                themeColor={themeColor}
                 {...(linkCallbackEnabled
                   ? { onLinkClick: handleLinkClick }
                   : {})}
-                renderCardTitle={(title: string) => (
-                  <span data-card-rendered-title>{title}</span>
-                )}
-                renderCardContent={(content: string) => (
-                  <span data-card-rendered-content>{content}</span>
-                )}
-                renderPopover={(card, set) => {
-                  // 默认显示为 'arrange'（排列），与 getMindMapLayoutMode 保持一致
-                  const currentLayoutMode: CardChildrenLayoutMode =
-                    card.childrenLayoutMode ?? 'arrange';
-                  const isDark = theme === 'dark';
-                  const popoverBg = isDark ? '#1f2937' : '#ffffff';
-                  const popoverBorder = isDark
-                    ? '1px solid rgba(255,255,255,0.12)'
-                    : '1px solid rgba(0,0,0,0.12)';
-                  const popoverShadow = isDark
-                    ? '0 4px 6px -1px rgba(0,0,0,0.4)'
-                    : '0 4px 6px -1px rgba(0,0,0,0.1)';
-                  const labelColor = isDark ? '#9ca3af' : '#6b7280';
-                  const inputBorder = isDark
-                    ? '1px solid rgba(255,255,255,0.12)'
-                    : '1px solid #d1d5db';
-                  const inputBg = isDark ? '#374151' : '#ffffff';
-                  const inputColor = isDark ? '#e5e7eb' : '#0f0f0f';
-                  return (
-                    <div
-                      className="card-canvas-demo-popover-content"
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 8,
-                        padding: 12,
-                        backgroundColor: popoverBg,
-                        border: popoverBorder,
-                        borderRadius: 8,
-                        boxShadow: popoverShadow,
-                        minWidth: 160,
-                      }}
+                {...(!editable
+                  ? {
+                      renderCardTitle: (title: string) => (
+                        <span data-card-rendered-title>{title}</span>
+                      ),
+                      renderCardContent: (content: string) => (
+                        <span data-card-rendered-content>{content}</span>
+                      ),
+                    }
+                  : {})}
+                onCommentCard={(card) => setCommentingCardId(card.id)}
+                renderPopover={(card) => (
+                  <>
+                    <ComponentsButton
+                      aria-label={`Delete ${card.title || 'untitled card'}`}
+                      data-card-popover-delete-button
+                      disabled={card.lock === true}
+                      size="small"
+                      variant="ghost"
+                      onClick={() => handleDeleteCards([card.id])}
                     >
-                      <span style={{ fontSize: 12, color: labelColor }}>
-                        标题
-                      </span>
-                      <input
-                        value={card.title}
-                        onChange={(e) => set({ title: e.target.value })}
-                        style={{
-                          padding: '4px 8px',
-                          border: inputBorder,
-                          borderRadius: 4,
-                          backgroundColor: inputBg,
-                          color: inputColor,
-                        }}
-                      />
-                      <span style={{ fontSize: 12, color: labelColor }}>
-                        内容
-                      </span>
-                      <input
-                        value={card.content}
-                        onChange={(e) => set({ content: e.target.value })}
-                        style={{
-                          padding: '4px 8px',
-                          border: inputBorder,
-                          borderRadius: 4,
-                          backgroundColor: inputBg,
-                          color: inputColor,
-                        }}
-                      />
-                      <span style={{ fontSize: 12, color: labelColor }}>
-                        子卡布局
-                      </span>
-                      <select
-                        data-card-children-layout-mode-select
-                        value={currentLayoutMode}
-                        onChange={(event) => {
-                          const nextMode: CardChildrenLayoutMode =
-                            event.target.value === 'mind-map-horizontal'
-                              ? 'mind-map-horizontal'
-                              : event.target.value === 'arrange'
-                                ? 'arrange'
-                                : 'free';
-                          set({ childrenLayoutMode: nextMode });
-                        }}
-                        style={{
-                          padding: '4px 8px',
-                          border: inputBorder,
-                          borderRadius: 4,
-                          backgroundColor: inputBg,
-                          color: inputColor,
-                        }}
-                      >
-                        <option value="free">Free</option>
-                        <option value="mind-map-horizontal">
-                          Mind-map horizontal
-                        </option>
-                        <option value="arrange">Arrange</option>
-                      </select>
-                    </div>
-                  );
-                }}
+                      <Icon name="delete" />
+                    </ComponentsButton>
+                  </>
+                )}
               />
+              <Dialog
+                onClose={() => setCommentingCardId(undefined)}
+                open={commentingCard !== undefined}
+                title="评论详情"
+              >
+                {commentingCard === undefined ? null : (
+                  <CardComments
+                    comments={commentingCard.comments ?? []}
+                    onCommentsChange={(comments) =>
+                      setCards((currentCards) =>
+                        currentCards.map((card) =>
+                          card.id === commentingCard.id
+                            ? { ...card, comments }
+                            : card
+                        )
+                      )
+                    }
+                  />
+                )}
+              </Dialog>
             </div>
           </div>
         </div>

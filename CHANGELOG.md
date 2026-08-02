@@ -8,21 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.2] - 2026-07-21
 
 ### Fixed
+
 - 修正 NPM 包名从 `@hamsternote/cards` 为 `@hamster-note/cards`
 
 ## [0.3.1] - 2026-07-21
 
 ### Added
+
 - 新增 CI 工作流（PR 检查、npm 发布、同步 dev 分支）及包边界检查脚本
 
 ## [0.3.0] - 2026-07-21
 
 ### Changed
+
 - 版本号从 0.2.0 升级至 0.3.0，无代码变更
 
 ## [0.2.0] - 2026-07-20
 
 ### Added
+
 - 新增 CardCanvas 组件，支持拖拽和调整大小
 - 新增卡片层级结构，支持拖拽附加和级联删除
 - 新增链接模式、基于指针的父级分组、弹出窗口及底部链接可见性
@@ -35,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 使用 Button 组件初始化 React 组件库
 
 ### Fixed
+
 - 修复深色主题对比度回归问题
 - 移除不安全的 arrange 索引断言
 - 修复嵌套 arrange 归一化的稳定性
@@ -46,10 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 卡片内容自动换行和标题点击选择修复
 
 ### Changed
+
 - 重构 CardCanvas，提取子组件、选择选项和距离感知拖拽
 - 增强 CardCanvas 自定义样式和改进调整大小逻辑
 - 将思维导图的拖拽和调整大小辅助函数提取到工具模块
 
 ### Test
+
 - 稳定思维导图分离断言的轮询测试
 - 覆盖思维导图布局交互测试

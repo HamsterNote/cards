@@ -231,6 +231,42 @@
     "@eslint/core" "^0.17.0"
     levn "^0.4.1"
 
+"@hamster-note/components@^0.2.1-beta.2":
+  version "0.2.1-beta.2"
+  resolved "https://registry.yarnpkg.com/@hamster-note/components/-/components-0.2.1-beta.2.tgz#c13b2b61f74d0478f59d0807245ba30641ff6170"
+  integrity sha512-H19JuwVMIvX7aETd1rkvLvDS8YnGCgY0n8Hv9O8mLv/HHcn5CrPAJyKKBBQ02jrCFMnVCg1e1vNDbN4bDr65eA==
+
+"@hamster-note/components@file:vendor/hamster-note-components-0.2.1-beta.4.tgz":
+  version "0.2.1-beta.4"
+  resolved "file:vendor/hamster-note-components-0.2.1-beta.4.tgz#6be18c835ce67eb86833c0481760065917bb3402"
+
+"@hamster-note/notes@file:vendor/hamster-note-notes-1.2.0-beta.tgz":
+  version "1.2.0-beta"
+  resolved "file:vendor/hamster-note-notes-1.2.0-beta.tgz#67a37b4b09ac87dfb69476983ff529748ab3e49a"
+  dependencies:
+    "@hamster-note/components" "^0.2.1-beta.2"
+    "@hamster-note/painting" "0.2.0"
+    "@system-ui-js/multi-drag" "^0.4.0"
+    highlight.js "^11.11.1"
+    katex "^0.17.0"
+    use-undo "^1.2.0"
+
+"@hamster-note/painting@0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@hamster-note/painting/-/painting-0.2.0.tgz#508eed5910357e95460525950effbe2941d124bb"
+  integrity sha512-GUNh6EBFLr01LwCSpJrt0xNalOOUAHZZOu31+ZIivUJscoQHq9P8PWYcYMjBHkVVHPGThXo0+z3/9NtvBCVepQ==
+  dependencies:
+    "@hamster-note/virtual-paper" "0.1.0-beta.2"
+    "@system-ui-js/multi-drag" "0.4.0"
+    "@system-ui-js/multi-drag-core" "0.4.0"
+
+"@hamster-note/virtual-paper@0.1.0-beta.2":
+  version "0.1.0-beta.2"
+  resolved "https://registry.yarnpkg.com/@hamster-note/virtual-paper/-/virtual-paper-0.1.0-beta.2.tgz#2cff4d99116c9665dc9eef94c57a3a97d7f2c580"
+  integrity sha512-x8HN06mlbwEvpOXrn/j/s5ggploDzjwfTTEnKZphrFqnif2+UYngJfQrhTyXZjiUYM0iSlctD6wl/q4KVj2aiQ==
+  dependencies:
+    "@system-ui-js/multi-drag" "^0.4.0"
+
 "@humanfs/core@^0.19.2":
   version "0.19.2"
   resolved "https://registry.yarnpkg.com/@humanfs/core/-/core-0.19.2.tgz#a8272ca03b2acf492670222b2320b6c421bfde60"
@@ -501,12 +537,12 @@
   dependencies:
     "@swc/counter" "^0.1.3"
 
-"@system-ui-js/multi-drag-core@*":
+"@system-ui-js/multi-drag-core@*", "@system-ui-js/multi-drag-core@0.4.0":
   version "0.4.0"
   resolved "https://registry.yarnpkg.com/@system-ui-js/multi-drag-core/-/multi-drag-core-0.4.0.tgz#68dd401af22691ca55f840e0fd4b7818794473d6"
   integrity sha512-7V366jAmK8hUjPJi9yYngabhuE+ixnRxZS7lw/1uNbxEYLaR/Mh5XtxMvY/gGHcL7tdJtYzE5lF1i786jKbKIA==
 
-"@system-ui-js/multi-drag@^0.4.0":
+"@system-ui-js/multi-drag@0.4.0", "@system-ui-js/multi-drag@^0.4.0":
   version "0.4.0"
   resolved "https://registry.yarnpkg.com/@system-ui-js/multi-drag/-/multi-drag-0.4.0.tgz#0404192470eaa84a1afbe9ed01cf1ea1a2a12097"
   integrity sha512-gZwFJ2hrpq8CCmJhdoViIQAFd1cD+o8uWJUP/+Myo2xuqvamIuZdDsd9rIaD+JV6otA9+JF2O9XV0vozmqafOg==
@@ -893,6 +929,11 @@ color-name@~1.1.4:
   version "1.1.4"
   resolved "https://registry.yarnpkg.com/color-name/-/color-name-1.1.4.tgz#c2a09a87acbde69543de6f63fa3995c826c536a2"
   integrity sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==
+
+commander@^8.3.0:
+  version "8.3.0"
+  resolved "https://registry.yarnpkg.com/commander/-/commander-8.3.0.tgz#4837ea1b2da67b9c616a67afbb0fafee567bca66"
+  integrity sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww==
 
 compare-versions@^6.1.1:
   version "6.1.1"
@@ -1528,6 +1569,11 @@ hermes-parser@^0.25.1:
   dependencies:
     hermes-estree "0.25.1"
 
+highlight.js@^11.11.1:
+  version "11.11.1"
+  resolved "https://registry.yarnpkg.com/highlight.js/-/highlight.js-11.11.1.tgz#fca06fa0e5aeecf6c4d437239135fabc15213585"
+  integrity sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==
+
 ignore@^5.2.0:
   version "5.3.2"
   resolved "https://registry.yarnpkg.com/ignore/-/ignore-5.3.2.tgz#3cd40e729f3643fd87cb04e50bf0eb722bc596f5"
@@ -1813,6 +1859,13 @@ json5@^2.2.3:
     array.prototype.flat "^1.3.1"
     object.assign "^4.1.4"
     object.values "^1.1.6"
+
+katex@^0.17.0:
+  version "0.17.0"
+  resolved "https://registry.yarnpkg.com/katex/-/katex-0.17.0.tgz#536e25874ec9ac8728e3b4b7bf7fec6557b7dbf4"
+  integrity sha512-Vdw0ATsQ9V+LuegM/BTwQqV/6cTl5lbGcIrU+BCgLxyf6bo38ybOr372tuSIxir3CN720flu1meYR6XzNMwQnw==
+  dependencies:
+    commander "^8.3.0"
 
 keyv@^4.5.4:
   version "4.5.4"
@@ -2666,6 +2719,11 @@ uri-js@^4.2.2:
   integrity sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==
   dependencies:
     punycode "^2.1.0"
+
+use-undo@^1.2.0:
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/use-undo/-/use-undo-1.2.0.tgz#fed1ed5e698b07acaa3e6ea828fd1ea989682914"
+  integrity sha512-ZzrdoHH67DCMuWbTQ14MKX2YRhzzCZMd9dtiaSu3mLzxd/iXfvKY6m6qCIAlU/Psmq328o2o4PvM/keGijXCIA==
 
 vite-plugin-dts@^5.0.3:
   version "5.0.3"

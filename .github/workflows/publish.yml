@@ -106,6 +106,16 @@ jobs:
         run: |
           yarn pack:check
 
+      - name: Install packed-consumer browser
+        if: steps.version.outputs.should_publish == 'true'
+        run: |
+          npx playwright install --with-deps chromium
+
+      - name: Verify packed consumer
+        if: steps.version.outputs.should_publish == 'true'
+        run: |
+          yarn pack:consumer
+
       - name: Publish to npm
         if: steps.version.outputs.should_publish == 'true'
         env:

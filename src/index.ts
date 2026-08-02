@@ -1,17 +1,38 @@
-export { Button } from './components/Button';
-export type { ButtonProps } from './components/Button';
-export type { CardsTheme } from './theme';
-export { CardCanvas } from './components/CardCanvas';
-export type {
-  CardChildrenLayoutMode,
-  CardCanvasCard,
-  CardCanvasOptions,
-  CardCanvasProps,
+export { Button, type ButtonProps } from './components/Button';
+export {
+  CardCanvas,
+  type CardCanvasCard,
+  type CardCanvasColorOption,
+  type CardCanvasOptions,
+  type CardCanvasProps,
+  type CardChildrenLayoutMode,
 } from './components/CardCanvas';
-export { deleteCards, expandParentToContainChildren } from './utils/cards';
 export type {
-  ContentInset,
-  DeleteCardsCallback,
-  DeleteCardsMeta,
-} from './utils/cards';
+  CardCanvasMiniMapOptions,
+  CardCanvasMiniMapPosition,
+} from './components/CardCanvasMiniMap';
+export type {
+  CardCanvasVirtualPaperInteraction,
+  CardCanvasVirtualPaperOptions,
+} from './components/CardCanvasVirtualPaper';
+export { type CardComment, CardComments } from './components/CardComments';
+export type {
+  CardCanvasHandle,
+  ExternalCardDragAnchor,
+  ExternalCardDragCancelReason,
+  ExternalCardDragCompletion,
+  ExternalCardDragInput,
+  ExternalCardDragSession,
+  ExternalCardDragStartRejectReason,
+  ExternalCardDragStartResult,
+} from './components/ExternalCardDrag';
+export type { CardsTheme, CardsThemeAccent } from './theme';
+export type { CardContentBlock } from './types/card-content';
 export { CARD_CANVAS_POPOVER_OVERLAY_ATTRIBUTE } from './utils/card-popover-interactions';
+export {
+  type ContentInset,
+  type DeleteCardsCallback,
+  type DeleteCardsMeta,
+  deleteCards,
+  expandParentToContainChildren,
+} from './utils/cards';

@@ -23,19 +23,25 @@
     "dev": "vite --host 0.0.0.0 --port 9901",
     "build": "tsc -p tsconfig.build.json && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:external-card-drag": "tsc -p tsconfig.external-card-drag-tests.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "pack:check": "node scripts/check-pack.mjs",
+    "pack:consumer": "node scripts/check-packed-consumer.mjs",
     "test:e2e": "playwright test"
   },
   "peerDependencies": {
+    "@system-ui-js/multi-drag": "^0.4.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
+    "@hamster-note/components": "file:vendor/hamster-note-components-0.2.1-beta.4.tgz",
     "@playwright/test": "^1.61.1",
+    "@hamster-note/notes": "file:vendor/hamster-note-notes-1.2.0-beta.tgz",
+    "@system-ui-js/multi-drag": "^0.4.0",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
@@ -58,6 +64,6 @@
   },
   "packageManager": "yarn@1.22.22",
   "dependencies": {
-    "@system-ui-js/multi-drag": "^0.4.0"
+    "@hamster-note/virtual-paper": "0.1.0-beta.2"
   }
 }

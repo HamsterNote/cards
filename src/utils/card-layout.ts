@@ -27,6 +27,7 @@ type CardPoint = {
 type LayoutContext = {
   readonly cardById: Map<string, CardCanvasCard>;
   readonly childrenByParent: ReadonlyMap<string, readonly string[]>;
+  readonly lockedTreeIds: ReadonlySet<string>;
 };
 
 function normalizeParentId(parent: string | undefined): string | undefined {
@@ -99,6 +100,26 @@ function getCardChildren(
   return context.childrenByParent.get(parentId) ?? [];
 }
 
+function buildLockedTreeIds(
+  cards: readonly CardCanvasCard[],
+  childrenByParent: ReadonlyMap<string, readonly string[]>
+): ReadonlySet<string> {
+  const lockedTreeIds = new Set<string>();
+  const pendingIds = cards
+    .filter((card) => card.lock === true)
+    .map((card) => card.id);
+
+  while (pendingIds.length > 0) {
+    const cardId = pendingIds.shift();
+    if (cardId === undefined || lockedTreeIds.has(cardId)) continue;
+
+    lockedTreeIds.add(cardId);
+    pendingIds.push(...(childrenByParent.get(cardId) ?? []));
+  }
+
+  return lockedTreeIds;
+}
+
 function sumChildSubtreeHeights(
   context: LayoutContext,
   childIds: readonly string[],
@@ -158,7 +179,11 @@ function setCardPosition(
   point: CardPoint
 ): void {
   const card = context.cardById.get(cardId);
-  if (card === undefined || (card.x === point.x && card.y === point.y)) {
+  if (
+    card === undefined ||
+    context.lockedTreeIds.has(cardId) ||
+    (card.x === point.x && card.y === point.y)
+  ) {
     return;
   }
 
@@ -171,7 +196,7 @@ function moveCardTree(
   delta: CardPoint
 ): void {
   const card = context.cardById.get(cardId);
-  if (card === undefined) {
+  if (card === undefined || context.lockedTreeIds.has(cardId)) {
     return;
   }
 
@@ -191,7 +216,7 @@ function normalizeChildTree(
   target: CardPoint
 ): void {
   const child = context.cardById.get(childId);
-  if (child === undefined) {
+  if (child === undefined || context.lockedTreeIds.has(childId)) {
     return;
   }
 
@@ -237,7 +262,7 @@ function normalizeParentLayout(
     }
 
     const child = context.cardById.get(childId);
-    if (child === undefined) {
+    if (child === undefined || child.lock === true) {
       continue;
     }
 
@@ -280,7 +305,7 @@ function normalizeArrangeParentLayout(
     }
 
     const child = context.cardById.get(childId);
-    if (child === undefined) {
+    if (child === undefined || child.lock === true) {
       continue;
     }
 
@@ -343,7 +368,10 @@ function normalizeArrangeParentLayout(
     }
   }
   const requiredWidth = maxWidth + ARRANGE_CONTENT_LEFT + ARRANGE_CONTENT_RIGHT;
-  if (requiredHeight > parent.height || requiredWidth > parent.width) {
+  if (
+    parent.lock !== true &&
+    (requiredHeight > parent.height || requiredWidth > parent.width)
+  ) {
     context.cardById.set(parentId, {
       ...parent,
       width: Math.max(parent.width, requiredWidth),
@@ -355,19 +383,27 @@ function normalizeArrangeParentLayout(
 export function normalizeMindMapLayout(
   cards: readonly CardCanvasCard[]
 ): CardCanvasCard[] {
+  const childrenByParent = buildDirectChildrenByParent(cards);
   const context: LayoutContext = {
     cardById: new Map(cards.map((card) => [card.id, card])),
-    childrenByParent: buildDirectChildrenByParent(cards),
+    childrenByParent,
+    lockedTreeIds: buildLockedTreeIds(cards, childrenByParent),
   };
 
   for (const card of cards) {
-    if (getMindMapLayoutMode(card) === 'mind-map-horizontal') {
+    if (
+      !context.lockedTreeIds.has(card.id) &&
+      getMindMapLayoutMode(card) === 'mind-map-horizontal'
+    ) {
       normalizeParentLayout(context, card.id, new Set([card.id]));
     }
   }
 
   for (const card of cards) {
-    if (getMindMapLayoutMode(card) === 'arrange') {
+    if (
+      !context.lockedTreeIds.has(card.id) &&
+      getMindMapLayoutMode(card) === 'arrange'
+    ) {
       normalizeArrangeParentLayout(context, card.id, new Set([card.id]));
     }
   }

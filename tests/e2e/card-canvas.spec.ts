@@ -18,11 +18,20 @@ type CardDragLocators = {
 
 type CardDataSnapshot = {
   readonly id: string;
+  readonly title: string;
+  readonly content: string;
+  readonly contentBlocks?: readonly ContentBlockSnapshot[];
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
   readonly parent?: string;
+};
+
+type ContentBlockSnapshot = {
+  readonly id: string;
+  readonly kind: string;
+  readonly text?: string;
 };
 
 type HierarchyCardIds = {
@@ -128,13 +137,28 @@ function isCardDataSnapshot(value: unknown): value is CardDataSnapshot {
   if (!isRecord(value)) return false;
 
   const parent = value.parent;
+  const contentBlocks = value.contentBlocks;
   return (
     typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.content === 'string' &&
     typeof value.x === 'number' &&
     typeof value.y === 'number' &&
     typeof value.width === 'number' &&
     typeof value.height === 'number' &&
-    (parent === undefined || typeof parent === 'string')
+    (parent === undefined || typeof parent === 'string') &&
+    (contentBlocks === undefined ||
+      (Array.isArray(contentBlocks) &&
+        contentBlocks.every(isContentBlockSnapshot)))
+  );
+}
+
+function isContentBlockSnapshot(value: unknown): value is ContentBlockSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.kind === 'string' &&
+    (value.text === undefined || typeof value.text === 'string')
   );
 }
 
@@ -458,21 +482,25 @@ test.describe('CardCanvas select-on-add toggle', () => {
     );
   });
 
-  test('does not create cards or change selection when title or content is empty', async ({
+  test('creates cards when title, content, or both are empty', async ({
     page,
   }) => {
+    // Given: the Demo form is completely blank.
     await page.locator('[data-card-title-input]').fill('');
     await page.locator('[data-card-content-input]').fill('');
+
+    // When: the user creates an empty card, a title-only card, and a content-only card.
     await page.getByRole('button', { name: 'Add Card' }).click();
+    await addCard(page, 'Only Title', '');
+    await addCard(page, '', 'Only content');
 
-    await expect(page.locator('[data-card-id]')).toHaveCount(0);
-    await expect(page.locator('[data-card-data-content]')).toHaveText('[]');
-    await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
-
-    await page.locator('[data-card-title-input]').fill('Only Title');
-    await page.getByRole('button', { name: 'Add Card' }).click();
-
-    await expect(page.locator('[data-card-id]')).toHaveCount(0);
+    // Then: all three valid empty-field combinations remain in controlled data.
+    await expect(page.locator('[data-card-id]')).toHaveCount(3);
+    expect(await getCardData(page)).toMatchObject([
+      { id: 'card-1', title: '', content: '' },
+      { id: 'card-2', title: 'Only Title', content: '' },
+      { id: 'card-3', title: '', content: 'Only content' },
+    ]);
   });
 });
 
@@ -664,6 +692,7 @@ test.describe('CardCanvas custom rendering and options', () => {
   test('renders card title and content through Demo render props', async ({
     page,
   }) => {
+    await disableOption(page, '[data-card-editable-toggle]');
     await addCard(page, 'Rendered Title', 'Rendered Content');
 
     const card = page.locator('[data-card-id]').first();
@@ -853,14 +882,14 @@ test.describe('CardCanvas custom rendering and options', () => {
     await expect(content).toBeVisible();
   });
 
-  test('renders resize handles without an explicit z-index', async ({
+  test('renders resize handles above editable card content', async ({
     page,
   }) => {
     await addCard(page, 'Card A', 'Content A');
 
     const { handle } = getCardParts(page);
 
-    await expect(handle).toHaveCSS('z-index', 'auto');
+    await expect(handle).toHaveCSS('z-index', '2');
   });
 });
 
@@ -1693,6 +1722,9 @@ test.describe('CardCanvas Delete Selected', () => {
     await expect(firstCard).toHaveClass(/cards-card-canvas__card--selected/);
 
     await page.getByTestId('delete-selected-card').click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
     await expect(firstCard).toHaveCount(0);
     await expect(secondCard).toBeVisible();
 
@@ -1720,11 +1752,10 @@ test.describe('CardCanvas Delete Selected', () => {
       'card-1'
     );
 
-    page.once('dialog', async (dialog) => {
-      expect(dialog.message()).toBe('Delete this card and its child cards?');
-      await dialog.accept();
-    });
     await page.getByTestId('delete-selected-card').click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
 
     await expect(cardA).toHaveCount(0);
     await expect(cardB).toHaveCount(0);
@@ -1747,11 +1778,10 @@ test.describe('CardCanvas Delete Selected', () => {
       .dispatchEvent('click');
     await expect(cardA).toHaveClass(/cards-card-canvas__card--selected/);
 
-    page.once('dialog', async (dialog) => {
-      expect(dialog.message()).toBe('Delete this card and its child cards?');
-      await dialog.dismiss();
-    });
     await page.getByTestId('delete-selected-card').click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
 
     await expect(cardA).toBeVisible();
     await expect(cardB).toBeVisible();
@@ -1773,8 +1803,347 @@ test.describe('CardCanvas Delete Selected', () => {
     );
 
     await page.getByTestId('delete-selected-card').click();
+    const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete' }).click();
 
     await expect(firstCard).toHaveCount(0);
     await expect(page.locator('[data-card-selected-display]')).toBeEmpty();
+  });
+});
+
+test.describe('CardCanvas direct editing', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await addCard(page, 'Original title', 'Original content');
+    await page.locator('[data-card-editable-toggle]').check();
+  });
+
+  test('writes a plain-text title back to controlled card data', async ({
+    page,
+  }) => {
+    // Given: the first card title is directly editable.
+    const title = page.locator(
+      '[data-card-id="card-1"] [data-card-title-edit]'
+    );
+    await expect(title).toHaveText('Original title');
+
+    // When: the user replaces the title and commits with Enter.
+    await title.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Edited title');
+    await page.keyboard.press('Enter');
+
+    // Then: the visible title and controlled data contain plain text only.
+    await expect(title).toHaveText('Edited title');
+    expect(getCardDataById(await getCardData(page), 'card-1').title).toBe(
+      'Edited title'
+    );
+  });
+
+  test('restores the title model when direct editing is cancelled with Escape', async ({
+    page,
+  }) => {
+    // Given: the focused title has a live edit already mirrored to controlled data.
+    const title = page.locator(
+      '[data-card-id="card-1"] [data-card-title-edit]'
+    );
+    await title.fill('Cancelled title');
+    expect(getCardDataById(await getCardData(page), 'card-1').title).toBe(
+      'Cancelled title'
+    );
+
+    // When: the user cancels this editing session with Escape.
+    await page.keyboard.press('Escape');
+
+    // Then: both the rendered title and controlled data return to the focus-time value.
+    await expect(title).toHaveText('Original title');
+    expect(getCardDataById(await getCardData(page), 'card-1').title).toBe(
+      'Original title'
+    );
+  });
+
+  test('does not move a card while dragging across its editable title', async ({
+    page,
+  }) => {
+    // Given: the editable title has suspended card dragging.
+    const title = page.locator(
+      '[data-card-id="card-1"] [data-card-title-edit]'
+    );
+    const before = getCardDataById(await getCardData(page), 'card-1');
+
+    // When: the pointer drags across the title as if selecting text.
+    await dragLocatorBy(page, title, { x: 60, y: 20 });
+
+    // Then: the card coordinates remain unchanged.
+    const after = getCardDataById(await getCardData(page), 'card-1');
+    expectCardPositionUnchanged(before, after);
+  });
+
+  test('falls back to plain content when persisted content blocks are empty', async ({
+    page,
+  }) => {
+    // Given: legacy controlled data contains plain text alongside an empty blocks array.
+    const [card] = await getCardData(page);
+    await page.evaluate((legacyCard) => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            {
+              ...legacyCard,
+              content: 'Legacy plain content',
+              contentBlocks: [],
+            },
+          ],
+        })
+      );
+    }, card);
+
+    // When: the user opens and saves the content Dialog without changing the fallback text.
+    const cardBody = page.locator(
+      '[data-card-id="card-1"] [data-card-note-content]'
+    );
+    await expect(cardBody).toContainText('Legacy plain content');
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    await expect(dialog).toContainText('Legacy plain content');
+    await dialog.getByRole('button', { name: '保存' }).click();
+
+    // Then: saving normalizes blocks without erasing the plain-text body.
+    const savedCard = getCardDataById(await getCardData(page), 'card-1');
+    expect(savedCard.content).toBe('Legacy plain content');
+    expect(savedCard.contentBlocks?.[0]?.text).toBe('Legacy plain content');
+  });
+
+  test('adopts controlled content updates until the dialog draft is edited', async ({
+    page,
+  }) => {
+    // Given: the content Dialog is open but the user has not changed its local draft.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    const [card] = await getCardData(page);
+
+    // When: the controlled card receives newer content from outside the Dialog.
+    await page.evaluate((currentCard) => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            {
+              ...currentCard,
+              content: 'Externally updated content',
+              contentBlocks: [
+                {
+                  id: 'card-1-external-p0',
+                  kind: 'paragraph',
+                  text: 'Externally updated content',
+                },
+              ],
+            },
+          ],
+        })
+      );
+    }, card);
+
+    // Then: the untouched editor reflects and saves the latest controlled value.
+    await expect(dialog).toContainText('Externally updated content');
+    await dialog.getByRole('button', { name: '保存' }).click();
+    const savedCard = getCardDataById(await getCardData(page), 'card-1');
+    expect(savedCard.content).toBe('Externally updated content');
+    expect(savedCard.contentBlocks?.[0]?.text).toBe(
+      'Externally updated content'
+    );
+  });
+
+  test('keeps an edited dialog draft when controlled content updates later', async ({
+    page,
+  }) => {
+    // Given: the user has already created a local Dialog draft.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    const paragraph = dialog
+      .locator(
+        '[data-card-content-dialog-editor] [contenteditable="true"]:visible'
+      )
+      .first();
+    await paragraph.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Local dialog draft');
+    const [card] = await getCardData(page);
+
+    // When: newer controlled content arrives after the draft became dirty.
+    await page.evaluate((currentCard) => {
+      window.dispatchEvent(
+        new CustomEvent('card-canvas-demo:set-cards', {
+          detail: [
+            {
+              ...currentCard,
+              content: 'Later external content',
+              contentBlocks: [
+                {
+                  id: 'card-1-later-p0',
+                  kind: 'paragraph',
+                  text: 'Later external content',
+                },
+              ],
+            },
+          ],
+        })
+      );
+    }, card);
+    await dialog.getByRole('button', { name: '保存' }).click();
+
+    // Then: the explicit local draft wins and is persisted as both content forms.
+    const savedCard = getCardDataById(await getCardData(page), 'card-1');
+    expect(savedCard.content).toBe('Local dialog draft');
+    expect(savedCard.contentBlocks?.[0]?.text).toBe('Local dialog draft');
+  });
+
+  test('keeps card content read-only and saves NoteContent edits from the dialog', async ({
+    page,
+  }) => {
+    // Given: the card body is readable but has no editable surface on the canvas.
+    const cardBody = page.locator(
+      '[data-card-id="card-1"] [data-card-note-content]'
+    );
+    await expect(cardBody).toContainText('Original content');
+    await expect(cardBody.locator('[contenteditable="true"]')).toHaveCount(0);
+
+    // When: the user opens the selected card's content Dialog and edits its paragraph.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('[data-card-canvas-toolbar]')).toHaveCount(0);
+    await expect(page.locator('[data-card-content-edit-button]')).toHaveCount(
+      0
+    );
+    const paragraph = dialog
+      .locator(
+        '[data-card-content-dialog-editor] [contenteditable="true"]:visible'
+      )
+      .first();
+    await expect(paragraph).toBeVisible();
+    await paragraph.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Edited note body');
+    await dialog.getByRole('button', { name: '保存' }).click();
+
+    // Then: rich blocks are persisted and the read-only card mirrors their plain text.
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('[data-card-canvas-toolbar]')).toBeVisible();
+    await expect(page.locator('[data-card-content-edit-button]')).toBeVisible();
+    await expect(cardBody).toContainText('Edited note body');
+    await expect
+      .poll(
+        async () => getCardDataById(await getCardData(page), 'card-1').content
+      )
+      .toBe('Edited note body');
+    const card = getCardDataById(await getCardData(page), 'card-1');
+    expect(card.contentBlocks?.[0]?.text).toBe('Edited note body');
+  });
+
+  test('discards content dialog edits when cancelled', async ({ page }) => {
+    // Given: the user has changed the content only inside the modal draft.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    const paragraph = dialog
+      .locator(
+        '[data-card-content-dialog-editor] [contenteditable="true"]:visible'
+      )
+      .first();
+    await paragraph.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Discarded draft');
+
+    // When: the user cancels instead of saving.
+    await dialog.getByRole('button', { name: '取消' }).click();
+
+    // Then: the dialog closes and controlled card content remains unchanged.
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.locator('[data-card-id="card-1"] [data-card-note-content]')
+    ).toContainText('Original content');
+    expect(getCardDataById(await getCardData(page), 'card-1').content).toBe(
+      'Original content'
+    );
+  });
+
+  test('discards content dialog edits with Escape and keeps the card selected', async ({
+    page,
+  }) => {
+    // Given: a selected card has an unsaved content draft in the Dialog.
+    await page.locator('[data-card-content-edit-button]').click();
+    const dialog = page.getByRole('dialog', { name: '编辑卡片内容' });
+    const paragraph = dialog
+      .locator(
+        '[data-card-content-dialog-editor] [contenteditable="true"]:visible'
+      )
+      .first();
+    await paragraph.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Discarded with Escape');
+
+    // When: the user dismisses the Dialog with Escape.
+    await page.keyboard.press('Escape');
+
+    // Then: the draft is discarded while the selected card remains actionable.
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.locator('[data-card-id="card-1"] [data-card-note-content]')
+    ).toContainText('Original content');
+    await expect(page.locator('[data-card-selected-display]')).toHaveText(
+      'card-1'
+    );
+    await expect(page.locator('[data-card-content-edit-button]')).toBeVisible();
+  });
+});
+
+test.describe('CardCanvas virtual paper', () => {
+  test('toggles virtual paper without changing the default canvas surface', async ({
+    page,
+  }) => {
+    // Given: a regular card canvas with virtual paper disabled by default.
+    await page.goto('/');
+    await addCard(page, 'Virtual paper card', 'Zoomable content');
+    await expect(page.locator('[data-card-virtual-paper]')).toHaveCount(0);
+
+    // When: the user enables virtual paper from the demo control.
+    await page.locator('[data-card-virtual-paper-toggle]').check();
+
+    // Then: the canvas is hosted by VirtualPaper while its card remains usable.
+    await expect(page.locator('[data-card-virtual-paper]')).toHaveCount(1);
+    await expect(page.locator('[data-card-id="card-1"]')).toBeVisible();
+  });
+
+  test('converts a scaled pointer drag back to card coordinates', async ({
+    page,
+  }) => {
+    // Given: virtual paper is enabled and its zoom gesture has enlarged the card.
+    await page.goto('/');
+    await addCard(page, 'Scaled card', 'Coordinate conversion');
+    await page.locator('[data-card-virtual-paper-toggle]').check();
+    const card = page.locator('[data-card-id="card-1"]');
+    const initialBox = await getRequiredBox(card);
+    await page.mouse.move(
+      initialBox.x + initialBox.width / 2,
+      initialBox.y + initialBox.height / 2
+    );
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -600);
+    await page.keyboard.up('Control');
+    await expect
+      .poll(async () => (await getRequiredBox(card)).width)
+      .toBeGreaterThan(initialBox.width);
+    const before = getCardDataById(await getCardData(page), 'card-1');
+
+    // When: the card moves by a fixed screen distance while the viewport is scaled.
+    await dragLocatorBy(page, card.locator('.cards-card-canvas__card-header'), {
+      x: 60,
+      y: 0,
+    });
+
+    // Then: persisted canvas coordinates move by less than the screen distance.
+    const after = getCardDataById(await getCardData(page), 'card-1');
+    expect(after.x - before.x).toBeGreaterThan(0);
+    expect(after.x - before.x).toBeLessThan(60);
   });
 });

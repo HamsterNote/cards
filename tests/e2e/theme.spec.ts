@@ -39,10 +39,7 @@ test.describe('Theme switching', () => {
 
     const card = page.locator('[data-card-id]').first();
     // 深色主题下卡片背景不应再是纯白
-    await expect(card).not.toHaveCSS(
-      'background-color',
-      'rgb(255, 255, 255)'
-    );
+    await expect(card).not.toHaveCSS('background-color', 'rgb(255, 255, 255)');
   });
 
   test('dark theme paints the full demo page background', async ({ page }) => {
@@ -155,9 +152,6 @@ test.describe('Theme switching', () => {
     const addButton = page.getByRole('button', { name: 'Add Card' });
     await expect(addButton).toHaveAttribute('data-theme', 'dark');
     // 深色主题下 filled 按钮背景反转为白色
-    await expect(addButton).toHaveCSS(
-      'background-color',
-      'rgb(255, 255, 255)'
-    );
+    await expect(addButton).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   });
 });

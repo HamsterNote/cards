@@ -1,4 +1,9 @@
-import { test, expect, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import type { CardChildrenLayoutMode } from '../../src';
+import {
+  MIND_MAP_HORIZONTAL_GAP,
+  MIND_MAP_VERTICAL_GAP,
+} from '../../src/utils/card-layout';
 import {
   addCardWithParent,
   cardLocatorSelector,
@@ -16,11 +21,6 @@ import {
   type CardDataSnapshot,
   waitForAnimationFrame,
 } from './helpers';
-import {
-  MIND_MAP_HORIZONTAL_GAP,
-  MIND_MAP_VERTICAL_GAP,
-} from '../../src/utils/card-layout';
-import type { CardChildrenLayoutMode } from '../../src';
 
 const LINK_MODE_SELECTOR = '[data-card-link-mode-toggle]';
 
@@ -142,6 +142,9 @@ async function selectCard(page: Page, cardId: string): Promise<void> {
 
 async function deleteSelectedCard(page: Page): Promise<void> {
   await page.getByTestId('delete-selected-card').click();
+  const dialog = page.getByRole('dialog', { name: 'Delete card?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Delete' }).click();
 }
 
 async function resizeCardBy(
@@ -284,15 +287,20 @@ test.describe('CardCanvas mind-map data contract', () => {
   }) => {
     // Given: a free parent with one child is selected in the Demo.
     // 显式指定 'free' 模式，否则默认 'arrange' 会将子卡片排列到父卡片内部
-    const freeParent = Object.freeze({ ...parentCard, childrenLayoutMode: 'free' as const });
+    const freeParent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'free' as const,
+    });
     const detachedChild = Object.freeze({ ...childCard, x: 520, y: 120 });
     await loadFrozenCards(page, [freeParent, detachedChild]);
     await selectCard(page, parentCard.id);
+    await enableOption(page, '[data-card-editable-toggle]');
 
-    // When: the popover mode control switches to horizontal mind-map.
+    // When: the selected-card Popover switches to horizontal mind-map.
+    await page.locator('[data-card-children-layout-button]').click();
     await page
-      .locator('[data-card-children-layout-mode-select]')
-      .selectOption('mind-map-horizontal');
+      .locator('[data-card-children-layout-mode-option="mind-map-horizontal"]')
+      .click();
 
     // Then: mode is persisted and child coordinates are normalized.
     let cards = await getCardData(page);
@@ -303,9 +311,10 @@ test.describe('CardCanvas mind-map data contract', () => {
     expect(child.y).toBeCloseTo(expectedChildY(parent, [detachedChild], 0), 5);
 
     // When: the mode switches back to free.
+    await page.locator('[data-card-children-layout-button]').click();
     await page
-      .locator('[data-card-children-layout-mode-select]')
-      .selectOption('free');
+      .locator('[data-card-children-layout-mode-option="free"]')
+      .click();
 
     // Then: explicit free is written and existing coordinates are not erased.
     cards = await getCardData(page);
@@ -351,9 +360,10 @@ test.describe('CardCanvas mind-map data contract', () => {
     await expect(page.locator('[data-card-selected-display]')).toHaveText(
       parentCard.id
     );
+    await enableOption(page, '[data-card-editable-toggle]');
+    await page.locator('[data-card-children-layout-button]').click();
 
-    const select = page.locator('[data-card-children-layout-mode-select]');
-    await expect(select).toBeVisible();
+    await expect(page.locator('.hn-menu__submenu-panel')).toBeVisible();
 
     // When: clicking on an empty area of the canvas
     await page.mouse.click(0, 0);
@@ -446,7 +456,6 @@ test.describe('CardCanvas mind-map data contract', () => {
     const before = getCardDataById(await getCardData(page), rootSibling.id);
 
     // When: deleting the nested card cascades to its child leaf.
-    page.once('dialog', (dialog) => dialog.accept());
     await selectCard(page, nested.id);
     await deleteSelectedCard(page);
 
@@ -526,7 +535,10 @@ test.describe('CardCanvas mind-map data contract', () => {
   }) => {
     // Given: a frozen free parent and a large free card that will protrude after drop.
     // 显式指定 'free' 模式以测试 free 模式的 containment expansion 行为
-    const freeParent = Object.freeze({ ...parentCard, childrenLayoutMode: 'free' as const });
+    const freeParent = Object.freeze({
+      ...parentCard,
+      childrenLayoutMode: 'free' as const,
+    });
     const freeChild = Object.freeze({
       ...childCard,
       id: 'free-mode-child',

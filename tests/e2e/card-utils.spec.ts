@@ -1,9 +1,13 @@
 import { expect, test } from '@playwright/test';
 import type { CardCanvasCard } from '../../src';
+import { mergeCardPatch } from '../../src/utils/card-patch';
 import {
   assignParentFromPoint,
+  createDragPositionSnapshot,
   deleteCards,
+  expandParentToContainChildren,
   findParentCandidateId,
+  moveCardsFromSnapshot,
 } from '../../src/utils/cards';
 
 class CallbackRejectedError extends Error {
@@ -204,6 +208,47 @@ test.describe('deleteCards utility', () => {
     expect(callbackCalls).toBe(0);
   });
 
+  test('keeps a locked card and skips confirmation when it is requested directly', async () => {
+    // Given: a locked immutable card and a confirmation callback.
+    const lockedCard = Object.assign(makeCard('locked'), { lock: true });
+    const cards = freezeCards([lockedCard]);
+    let callbackCalls = 0;
+
+    // When: deletion targets the locked card directly.
+    const result = await deleteCards(cards, ['locked'], async () => {
+      callbackCalls += 1;
+      return true;
+    });
+
+    // Then: deletion is a no-op and does not ask for confirmation.
+    expect(result).toBe(cards);
+    expect(callbackCalls).toBe(0);
+  });
+
+  test('preserves a locked subtree when deleting its unlocked ancestor', async () => {
+    // Given: an unlocked root containing a locked child subtree and an unrelated card.
+    const root = makeCard('root');
+    const lockedChild = Object.assign(makeCard('locked-child', 'root'), {
+      lock: true,
+    });
+    const grandchild = makeCard('grandchild', 'locked-child');
+    const sibling = makeCard('sibling');
+    const cards = freezeCards([root, lockedChild, grandchild, sibling]);
+
+    // When: the unlocked root is deleted.
+    const result = await deleteCards(cards, ['root']);
+
+    // Then: the locked subtree survives and its root is detached from the deleted parent.
+    expect(cardIds(result)).toEqual(['locked-child', 'grandchild', 'sibling']);
+    const survivingLockedChild = result.find(
+      (card) => card.id === 'locked-child'
+    );
+    expect(survivingLockedChild).toBeDefined();
+    expect(Object.hasOwn(survivingLockedChild ?? {}, 'parent')).toBe(false);
+    expect(result).toContain(grandchild);
+    expect(result).toContain(sibling);
+  });
+
   test('rejects when callback rejects and leaves input unchanged', async () => {
     // Given: an immutable parent hierarchy and a rejecting callback.
     const cards = freezeCards([makeCard('root'), makeCard('child', 'root')]);
@@ -332,6 +377,22 @@ test.describe('findParentCandidateId utility', () => {
 });
 
 test.describe('assignParentFromPoint utility', () => {
+  test('does not assign a locked card to a parent when called directly', () => {
+    // Given: a locked card overlaps a valid parent candidate.
+    const locked = { ...makeCard('locked'), x: 200, y: 200, lock: true };
+    const parent = { ...makeCard('parent'), width: 100, height: 100 };
+
+    // When: a caller directly attempts parent assignment.
+    const result = assignParentFromPoint([locked, parent], locked.id, {
+      x: 50,
+      y: 50,
+    });
+
+    // Then: lock preserves all card data and returns the original locked card.
+    expect(result.cards).toEqual([locked, parent]);
+    expect(result.draggedCard).toBe(locked);
+  });
+
   test('raises the entire dragged subtree above its new parent', () => {
     // Given: a subtree descendant is below both its root and the new parent.
     const dragged = { ...makeCard('dragged'), x: 200, zIndex: 10 };
@@ -358,5 +419,123 @@ test.describe('assignParentFromPoint utility', () => {
     expect(nextDragged?.parent).toBe('parent');
     expect(nextDragged?.zIndex).toBeGreaterThan(parent.zIndex);
     expect(nextDescendant?.zIndex).toBeGreaterThan(parent.zIndex);
+  });
+});
+
+test.describe('card drag snapshot utility', () => {
+  test('keeps a locked descendant subtree stationary when its ancestor moves', () => {
+    // Given: an unlocked root with one movable child and one locked child subtree.
+    const root = { ...makeCard('root'), x: 10, y: 20 };
+    const movableChild = {
+      ...makeCard('movable-child', 'root'),
+      x: 30,
+      y: 40,
+    };
+    const lockedChild = {
+      ...makeCard('locked-child', 'root'),
+      x: 50,
+      y: 60,
+      lock: true,
+    };
+    const lockedGrandchild = {
+      ...makeCard('locked-grandchild', 'locked-child'),
+      x: 70,
+      y: 80,
+    };
+    const cards = [root, movableChild, lockedChild, lockedGrandchild];
+
+    // When: the root and its movable descendants are translated.
+    const snapshot = createDragPositionSnapshot(cards, root.id);
+    const result = moveCardsFromSnapshot(cards, snapshot, {
+      draggedCardId: root.id,
+      delta: { x: 25, y: 15 },
+    });
+
+    // Then: movement stops at the locked descendant boundary.
+    expect(result.cards).toEqual([
+      { ...root, x: 35, y: 35 },
+      { ...movableChild, x: 55, y: 55 },
+      lockedChild,
+      lockedGrandchild,
+    ]);
+  });
+
+  test('does not move a locked card when called directly', () => {
+    // Given: a locked card passed directly to the drag utility.
+    const lockedCard = { ...makeCard('locked'), x: 10, y: 20, lock: true };
+
+    // When: a caller attempts to move the locked card.
+    const snapshot = createDragPositionSnapshot([lockedCard], lockedCard.id);
+    const result = moveCardsFromSnapshot([lockedCard], snapshot, {
+      draggedCardId: lockedCard.id,
+      delta: { x: 25, y: 15 },
+    });
+
+    // Then: the utility preserves its position as a defense-in-depth boundary.
+    expect(result.cards).toEqual([lockedCard]);
+    expect(result.draggedCard).toBeUndefined();
+  });
+});
+
+test.describe('parent containment utility', () => {
+  test('does not expand a locked parent to contain children', () => {
+    // Given: a locked parent with a child outside its current content bounds.
+    const parent = {
+      ...makeCard('parent'),
+      width: 120,
+      height: 80,
+      lock: true,
+    };
+    const child = {
+      ...makeCard('child', parent.id),
+      x: 200,
+      y: 160,
+    };
+
+    // When: containment expansion is requested directly.
+    const result = expandParentToContainChildren([parent, child], parent.id, {
+      left: 0,
+      top: 0,
+      right: 12,
+      bottom: 12,
+    });
+
+    // Then: locked geometry remains unchanged.
+    expect(result).toEqual([parent, child]);
+  });
+});
+
+test.describe('card patch utility', () => {
+  test('preserves locked geometry while allowing content updates', () => {
+    // Given: a locked card and a patch that mixes editable data with geometry.
+    const lockedCard = {
+      ...makeCard('locked'),
+      parent: 'original-parent',
+      x: 10,
+      y: 20,
+      width: 180,
+      height: 120,
+      lock: true,
+    };
+
+    // When: a host callback submits content and geometry in one patch.
+    const result = mergeCardPatch(lockedCard, {
+      title: 'Updated title',
+      content: 'Updated content',
+      parent: 'different-parent',
+      x: 90,
+      y: 80,
+      width: 320,
+      height: 240,
+      lock: false,
+    });
+
+    // Then: content and unlock state update, but the locked geometry does not.
+    expect(result).toEqual({
+      ...lockedCard,
+      title: 'Updated title',
+      content: 'Updated content',
+      lock: false,
+    });
   });
 });

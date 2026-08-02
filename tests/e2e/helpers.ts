@@ -18,6 +18,9 @@ export type CardDragLocators = {
 
 export type CardDataSnapshot = {
   readonly id: string;
+  readonly title?: string;
+  readonly content?: string;
+  readonly headless?: boolean;
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -161,17 +164,25 @@ function isStringArray(value: unknown): value is readonly string[] {
 function isCardChildrenLayoutMode(
   value: unknown
 ): value is CardChildrenLayoutMode {
-  return value === 'free' || value === 'mind-map-horizontal' || value === 'arrange';
+  return (
+    value === 'free' || value === 'mind-map-horizontal' || value === 'arrange'
+  );
 }
 
 function isCardDataSnapshot(value: unknown): value is CardDataSnapshot {
   if (!isRecord(value)) return false;
 
   const parent = value.parent;
+  const title = value.title;
+  const content = value.content;
+  const headless = value.headless;
   const childrenLayoutMode = value.childrenLayoutMode;
   const linkedCardIds = value.linkedCardIds;
   return (
     typeof value.id === 'string' &&
+    (title === undefined || typeof title === 'string') &&
+    (content === undefined || typeof content === 'string') &&
+    (headless === undefined || typeof headless === 'boolean') &&
     typeof value.x === 'number' &&
     typeof value.y === 'number' &&
     typeof value.width === 'number' &&
